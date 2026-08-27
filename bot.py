@@ -1,13 +1,11 @@
 import os
 import re
 import html
-import asyncio
 import urllib.parse
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
@@ -15,26 +13,14 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# === تشغيل خادم ويب وهمي لإبقاء Railway نشطاً دوماً ===
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write("Bot is running perfectly!".encode("utf-8"))
-
-    def log_message(self, format, *args):
-        pass
-
-def run_fake_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
+# إعداد السجلات لمتابعة الأخطاء
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 # === إعدادات البوت والواتساب ===
 BOT_TOKEN = "8626819929:AAG3Q_0oxkgIZP_IYnmL4jK9L0M1N2P3Q"
 WHATSAPP_NUMBER = "201000744741"
 
+# === الأقسام الافتراضية ===
 CATEGORIES = {
     "cat_abayat": "عبايات واستقبال",
     "cat_pajamas": "بيجامات وترنجات بيتي",
@@ -43,6 +29,7 @@ CATEGORIES = {
     "cat_casual": "ملابس خروج وكاجوال"
 }
 
+# === هياكل تخزين البيانات المؤقتة ===
 user_carts = {}
 
 def get_cart(user_id):
@@ -56,6 +43,7 @@ def get_cart(user_id):
         }
     return user_carts[user_id]
 
+# === دالة استخراج وتنظيف نصوص المنشورات ===
 def parse_post_text(text: str):
     if not text:
         return {"code": "", "price": 0.0, "clean_title": "موديل ملابس"}
@@ -88,6 +76,7 @@ def parse_post_text(text: str):
         "clean_title": title
     }
 
+# === لوحات التحكم والمفاتيح التفاعلية ===
 def get_quantity_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -114,6 +103,7 @@ def get_quantity_keyboard():
         [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
     ])
 
+# === الأوامر ومعالجة رسائل البدء والروابط القادمة من القناة ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
@@ -150,6 +140,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.message.edit_text(welcome_text, reply_markup=reply_markup)
 
+# === معالجة منشورات القناة وتوليد أزرار الطلب التلقائية ===
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post
     if not post:
@@ -173,9 +164,10 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             await post.edit_caption(caption=post.caption, reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await post.edit_text(text=post.text, reply_markup=InlineKeyboardMarkup(keyboard))
-    except Exception as e:
+    except Exception:
         pass
 
+# === إدارة الضغط على الأزرار (Callbacks) ===
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -289,6 +281,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+# === معالجة الرسائل النصية وإدخال الكميات المخصصة ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
@@ -324,18 +317,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("عفواً، يرجى كتابة الرقم بالأرقام فقط (مثال: 7 أو 10).")
 
-# === تشغيل الخادم والبوت معاً ===
+# === التشغيل الرئيسي المباشر ===
+def main():
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.TEXT | filters.CAPTION), handle_channel_post))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    application.run_polling(drop_pending_updates=True)
+
 if __name__ == "__main__":
-    t = threading.Thread(target=run_fake_server, daemon=True)
-    t.start()
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.TEXT | filters.CAPTION), handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("...البوت وسيرفر الويب يعملان الآن بثبات دائم")
-    app.run_polling(drop_pending_updates=True)
+    main()
     
