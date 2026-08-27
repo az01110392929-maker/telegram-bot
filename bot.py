@@ -168,10 +168,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if uid not in user_carts: user_carts[uid] = []
 
-    # إذا كان الأمر يحتوي على كود الموديل
     if args and len(args) > 0 and args[0].startswith("buy_"):
         user_last_action_time[uid] = now
-        pid = args[0].replace("buy_", "")
+        pid = str(args[0].replace("buy_", ""))
         p = products_db.get(pid)
         if p:
             c_link = p.get("link") or p.get("channel_base")
@@ -188,7 +187,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
 
-    # تجاهل أمر start العادي إذا وصل مباشرة بالتزامن مع فتح موديل
     if now - user_last_action_time.get(uid, 0) < 2.0:
         return
 
@@ -205,8 +203,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    uid, parts = str(update.effective_user.id), query.data.split("_")
-    pid, qty = parts[1], int(parts[2])
+    uid = str(update.effective_user.id)
+    parts = query.data.split("_")
+    pid, qty = str(parts[1]), int(parts[2])
     p = products_db.get(pid)
     if not p: return
     
@@ -216,7 +215,9 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     user_last_channel[uid] = p_link
     save_data(CHANNELS_FILE, user_last_channel)
     
-    if uid not in user_carts: user_carts[uid] = []
+    if uid not in user_carts:
+        user_carts[uid] = []
+        
     user_carts[uid].append({
         "title": p['title'],
         "qty": qty,
@@ -242,7 +243,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
 async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    uid, pid = str(update.effective_user.id), query.data.replace("custom_", "")
+    uid, pid = str(update.effective_user.id), str(query.data.replace("custom_", ""))
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
@@ -263,7 +264,9 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         user_last_channel[uid] = p_link
         save_data(CHANNELS_FILE, user_last_channel)
         
-        if uid not in user_carts: user_carts[uid] = []
+        if uid not in user_carts:
+            user_carts[uid] = []
+            
         user_carts[uid].append({
             "title": p['title'],
             "qty": qty,
@@ -287,11 +290,22 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode=ParseMode.HTML
         )
 
-async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
+async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    uid = str(update.effective_user.id)
+    
+    # قراءة السلة المحدثة فوراً
     cart = user_carts.get(uid, [])
     if not cart:
+        cart_disk = load_data(CARTS_FILE).get(uid, [])
+        if cart_disk:
+            user_carts[uid] = cart_disk
+            cart = cart_disk
+
+    if not cart:
         kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
-        await bot.send_message(chat_id=chat_id, text="🛒 <b>الفاتورة فارغة الآن.</b>\nيمكنك الرجوع للقناة واختيار الموديلات التي ترغب بها:", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
+        await query.message.reply_text("🛒 <b>الفاتورة فارغة الآن.</b>\nيمكنك الرجوع للقناة واختيار الموديلات التي ترغب بها:", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
         return
         
     lines = []
@@ -301,26 +315,18 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
         lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>{pi}{ti}\n🖼️ <a href='{it['link']}'>رابط الموديل</a>")
         
-    tot_sum = sum(it['total'] for it in cart)
+    tot_sum = sum(it.get('total', 0) for it in cart)
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
     tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_val} ج.م" if tot_sum > 0 else ""
     summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join(lines) + tot_txt_html
     
-    del_btn_text = "❌ حذف صنف آخر" if is_after_delete else "❌ حذف صنف"
-    
     keyboard = [
         [InlineKeyboardButton("📲 إرسال الفاتورة عبر واتساب", callback_data="send_wa_and_clear")],
         [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=last_link)],
-        [InlineKeyboardButton(del_btn_text, callback_data="manage_items_after" if is_after_delete else "manage_items")],
+        [InlineKeyboardButton("❌ حذف صنف", callback_data="manage_items")],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
-    await bot.send_message(chat_id=chat_id, text=summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-
-async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    uid = str(update.effective_user.id)
-    await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=False)
+    await query.message.reply_text(summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
 async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -396,7 +402,8 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         save_data(CARTS_FILE, user_carts)
         await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
     
-    await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
+    # عرض الفاتورة بعد الحذف
+    await view_cart(update, context)
 
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     query = update.callback_query
@@ -420,7 +427,7 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
-    app.add_handler(CallbackQueryHandler(manage_items, pattern="^(manage_items|manage_items_after)$"))
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
