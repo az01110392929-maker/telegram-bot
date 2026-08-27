@@ -82,24 +82,19 @@ def parse_post_text(text: str):
 def get_quantity_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📦 ربع دسته (3 ق)", callback_data="qty_0.25"),
-            InlineKeyboardButton("📦 نص دسته (6 ق)", callback_data="qty_0.5"),
+            InlineKeyboardButton("1 دسته (12 ق) 📦", callback_data="qty_1.0"),
+            InlineKeyboardButton("2 دسته (24 ق) 📦", callback_data="qty_2.0"),
         ],
         [
-            InlineKeyboardButton("📦 دسته إلا ربع (9 ق)", callback_data="qty_0.75"),
-            InlineKeyboardButton("📦 1 دسته (12 ق)", callback_data="qty_1.0"),
+            InlineKeyboardButton("3 دسته (36 ق) 📦", callback_data="qty_3.0"),
+            InlineKeyboardButton("4 دسته (48 ق) 📦", callback_data="qty_4.0"),
         ],
         [
-            InlineKeyboardButton("📦 دسته وربع (15 ق)", callback_data="qty_1.25"),
-            InlineKeyboardButton("📦 دسته ونص (18 ق)", callback_data="qty_1.5"),
+            InlineKeyboardButton("5 دسته (60 ق) 📦", callback_data="qty_5.0"),
+            InlineKeyboardButton("6 دسته (72 ق) 📦", callback_data="qty_6.0"),
         ],
         [
-            InlineKeyboardButton("📦 2 دسته (24 ق)", callback_data="qty_2.0"),
-            InlineKeyboardButton("📦 3 دسته (36 ق)", callback_data="qty_3.0"),
-        ],
-        [
-            InlineKeyboardButton("📦 4 دسته (48 ق)", callback_data="qty_4.0"),
-            InlineKeyboardButton("📦 5 دسته (60 ق)", callback_data="qty_5.0"),
+            InlineKeyboardButton("10 دسته (120 ق) 📦", callback_data="qty_10.0"),
         ],
         [InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")],
         [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
@@ -117,7 +112,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cart["temp_item"] = f"موديل كود {item_code}"
         cart["temp_code"] = item_code
         
-        text = f"🛍️ *طلب موديل:* `{item_code}`\n\nاختر الكمية المطلوبة بالجملة:"
+        text = f"🛍️ *طلب موديل:* `{item_code}`\n\nاختر الكمية المطلوبة:"
         if update.message:
             await update.message.reply_text(text, reply_markup=get_quantity_keyboard(), parse_mode="Markdown")
         return
@@ -211,20 +206,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
 
         items_count = len(cart["items"])
-        text = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) من *{item_name}* بنجاح!"
+        text = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
         keyboard = [
             [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
             [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
             [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
         ]
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     elif data == "custom_qty":
         cart["state"] = "waiting_custom_qty"
         text = (
-            "✍️ *اكتب كمية الدست التي تحتاجها للموديل:*\n"
-            "(فوري : من ربع دسته وخصم خاص للكميات)\n"
-            "• مثل: *9* أو *10* أو *11* وهكذا العدد الي تحتاجه"
+            "✍️ *اكتب كمية الدست المطلوبة:*\n"
+            "• أرسل الرقم فقط (مثال: *7* أو *12*)."
         )
         await query.message.reply_text(text, parse_mode="Markdown")
 
@@ -309,7 +303,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cart["state"] = None
 
             items_count = len(cart["items"])
-            msg = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) بنجاح!"
+            msg = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
             keyboard = [
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
                 [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
