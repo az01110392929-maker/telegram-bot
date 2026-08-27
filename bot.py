@@ -12,10 +12,20 @@ DB_FILE, CARTS_FILE, CONFIG_FILE, CHANNELS_FILE = "products_db.json", "user_cart
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 def load_data(p):
-    return json.load(open(p, "r", encoding="utf-8")) if os.path.exists(p) else {}
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
 def save_data(p, d):
-    try: json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    except: pass
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 products_db = load_data(DB_FILE)
 user_carts = load_data(CARTS_FILE)
@@ -65,7 +75,7 @@ def parse_post_text(text):
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d:
                 val = float(d[0])
-                if val > 30: # غالباً هذا سعر الجملة للموديل إذا كان كبيراً
+                if val > 30:
                     if doz_price == 0: doz_price = val
                 else:
                     if unit_price == 0: unit_price = val
@@ -423,5 +433,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
     
