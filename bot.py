@@ -77,35 +77,45 @@ def parse_post_text(text: str):
 def get_quantity_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("ربع دسته (3 ق)", callback_data="qty_0.25"),
-            InlineKeyboardButton("نص دسته (6 ق)", callback_data="qty_0.5"),
+            InlineKeyboardButton("📦 ربع دسته (3 ق)", callback_data="qty_0.25"),
+            InlineKeyboardButton("📦 نص دسته (6 ق)", callback_data="qty_0.5"),
         ],
         [
-            InlineKeyboardButton("دسته إلا ربع (9 ق)", callback_data="qty_0.75"),
-            InlineKeyboardButton("1 دسته (12 ق)", callback_data="qty_1.0"),
+            InlineKeyboardButton("📦 دسته إلا ربع (9 ق)", callback_data="qty_0.75"),
+            InlineKeyboardButton("📦 1 دسته (12 ق)", callback_data="qty_1.0"),
         ],
         [
-            InlineKeyboardButton("دسته وربع (15 ق)", callback_data="qty_1.25"),
-            InlineKeyboardButton("دسته ونص (18 ق)", callback_data="qty_1.5"),
+            InlineKeyboardButton("📦 دسته وربع (15 ق)", callback_data="qty_1.25"),
+            InlineKeyboardButton("📦 دسته ونص (18 ق)", callback_data="qty_1.5"),
         ],
         [
-            InlineKeyboardButton("2 دسته (24 ق)", callback_data="qty_2.0"),
-            InlineKeyboardButton("3 دسته (36 ق)", callback_data="qty_3.0"),
+            InlineKeyboardButton("📦 2 دسته (24 ق)", callback_data="qty_2.0"),
+            InlineKeyboardButton("📦 3 دسته (36 ق)", callback_data="qty_3.0"),
         ],
         [
-            InlineKeyboardButton("4 دسته (48 ق)", callback_data="qty_4.0"),
-            InlineKeyboardButton("5 دسته (60 ق)", callback_data="qty_5.0"),
+            InlineKeyboardButton("📦 4 دسته (48 ق)", callback_data="qty_4.0"),
+            InlineKeyboardButton("📦 5 دسته (60 ق)", callback_data="qty_5.0"),
         ],
         [InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")],
         [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
     ])
 
-# === الأوامر ومعالجة رسائل البدء ===
+# === الأوامر ومعالجة رسائل البدء والروابط القادمة من القناة ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
     cart["state"] = None
-    cart["temp_item"] = None
+
+    args = context.args if context.args else []
+    if args and args[0].startswith("item_"):
+        item_code = args[0].replace("item_", "")
+        cart["temp_item"] = f"موديل كود {item_code}"
+        cart["temp_code"] = item_code
+        
+        text = f"🛍️ *طلب موديل:* `{item_code}`\n\nاختر الكمية المطلوبة بالجملة:"
+        if update.message:
+            await update.message.reply_text(text, reply_markup=get_quantity_keyboard(), parse_mode="Markdown")
+        return
 
     items_count = len(cart["items"])
     cart_btn_text = f"🛒 عرض الفاتورة ({items_count} صنف)" if items_count > 0 else "🛒 عرض الفاتورة الحالية"
@@ -139,7 +149,8 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     parsed = parse_post_text(text)
     bot_username = (await context.bot.get_me()).username
-    deep_link = f"https://t.me/{bot_username}?start=item_{parsed['code'] or 'auto'}"
+    code_val = parsed['code'] if parsed['code'] else 'auto'
+    deep_link = f"https://t.me/{bot_username}?start=item_{code_val}"
 
     keyboard = [
         [InlineKeyboardButton("🛍️ اطلب هذا الموديل بالجملة", url=deep_link)]
@@ -183,7 +194,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("qty_"):
         qty_val = float(data.replace("qty_", ""))
-        item_name = cart.get("temp_item", "موديل ملابس")
+        item_name = cart.get("temp_item") or "موديل ملابس"
         pieces = int(qty_val * 12)
 
         cart["items"].append({
@@ -280,7 +291,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("يرجى إدخال رقم موجب صحيح أو عشري (مثال: 5 أو 2.5).")
                 return
 
-            item_name = cart.get("temp_item", "موديل ملابس")
+            item_name = cart.get("temp_item") or "موديل ملابس"
             pieces = int(qty_val * 12)
 
             cart["items"].append({
