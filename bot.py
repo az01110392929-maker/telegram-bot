@@ -28,10 +28,6 @@ def save_data(p, d):
     except Exception:
         pass
 
-products_db = load_data(DB_FILE)
-user_carts = load_data(CARTS_FILE)
-bot_config = load_data(CONFIG_FILE)
-user_last_channel = load_data(CHANNELS_FILE)
 user_state = {}
 sent_delete_messages = {}
 
@@ -39,6 +35,8 @@ def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
 def get_user_channel(uid):
+    user_last_channel = load_data(CHANNELS_FILE)
+    bot_config = load_data(CONFIG_FILE)
     return user_last_channel.get(str(uid), bot_config.get("channel_link", DEFAULT_CHANNEL_LINK))
 
 def parse_post_text(text):
@@ -153,7 +151,6 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             data["link"] = f"https://t.me/c/{cid}/{post.message_id}"
             data["channel_base"] = f"https://t.me/c/{cid}"
         
-        global products_db
         products_db = load_data(DB_FILE)
         products_db[pid] = data
         save_data(DB_FILE, products_db)
@@ -166,9 +163,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     uid, args = str(update.effective_user.id), context.args
     
-    global user_carts, products_db
     user_carts = load_data(CARTS_FILE)
     products_db = load_data(DB_FILE)
+    user_last_channel = load_data(CHANNELS_FILE)
     
     if uid not in user_carts: user_carts[uid] = []
     
@@ -212,7 +209,6 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     uid, parts = str(update.effective_user.id), query.data.split("_")
     pid, qty = parts[1], int(parts[2])
     
-    global products_db, user_carts
     products_db = load_data(DB_FILE)
     p = products_db.get(pid)
     if not p: return
@@ -220,6 +216,8 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     tot = calculate_item_total(p, qty)
     lbl = get_quantity_label(qty)
     p_link = p.get("link", get_user_channel(uid))
+    
+    user_last_channel = load_data(CHANNELS_FILE)
     user_last_channel[uid] = p_link
     save_data(CHANNELS_FILE, user_last_channel)
     
@@ -250,7 +248,6 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     uid, pid = str(update.effective_user.id), query.data.replace("custom_", "")
     
-    global products_db
     products_db = load_data(DB_FILE)
     p = products_db.get(pid)
     if not p: return
@@ -270,10 +267,11 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
         p_link = p.get("link", get_user_channel(uid))
+        
+        user_last_channel = load_data(CHANNELS_FILE)
         user_last_channel[uid] = p_link
         save_data(CHANNELS_FILE, user_last_channel)
         
-        global user_carts
         user_carts = load_data(CARTS_FILE)
         if uid not in user_carts: user_carts[uid] = []
         user_carts[uid].append({
@@ -298,7 +296,6 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
-    global user_carts
     user_carts = load_data(CARTS_FILE)
     cart = user_carts.get(uid, [])
     if not cart:
@@ -338,7 +335,6 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    global user_carts
     user_carts = load_data(CARTS_FILE)
     cart = user_carts.get(uid, [])
     if not cart:
@@ -372,7 +368,6 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    global user_carts
     user_carts = load_data(CARTS_FILE)
     cart = user_carts.get(uid, [])
     if not cart:
@@ -418,11 +413,11 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception: pass
         sent_delete_messages[uid] = []
     
-    global user_carts
     user_carts = load_data(CARTS_FILE)
     if 0 <= idx < len(user_carts.get(uid, [])):
         rem = user_carts[uid].pop(idx)
         if rem.get("link"):
+            user_last_channel = load_data(CHANNELS_FILE)
             user_last_channel[uid] = rem["link"]
             save_data(CHANNELS_FILE, user_last_channel)
         save_data(CARTS_FILE, user_carts)
@@ -435,10 +430,10 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.answer()
     uid = str(update.effective_user.id)
     
-    global user_carts
     user_carts = load_data(CARTS_FILE)
     cart = user_carts.get(uid, [])
     if cart and cart[-1].get("link"):
+        user_last_channel = load_data(CHANNELS_FILE)
         user_last_channel[uid] = cart[-1]["link"]
         save_data(CHANNELS_FILE, user_last_channel)
         
@@ -454,4 +449,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
-    app.add_handler(CallbackQueryHandler(manage_items, pattern="^(manage_items|manage_it
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^(manage_items|manage_items_after)$"))
+    app.add_handler(Callba
