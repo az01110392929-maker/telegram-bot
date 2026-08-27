@@ -32,7 +32,6 @@ user_carts = load_data(CARTS_FILE)
 bot_config = load_data(CONFIG_FILE)
 user_last_channel = load_data(CHANNELS_FILE)
 user_state = {}
-sent_delete_messages = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -161,14 +160,10 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         except: pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid, args = str(update.effective_user.id), context.args
+    if not update.message: return
+    uid = str(update.effective_user.id)
+    args = context.args
     if uid not in user_carts: user_carts[uid] = []
-    
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
-            try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
-            except: pass
-        sent_delete_messages[uid] = []
 
     if args and len(args) > 0 and args[0].startswith("buy_"):
         pid = args[0].replace("buy_", "")
@@ -224,10 +219,12 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "photo_id": p.get("photo_id")
     })
     save_data(CARTS_FILE, user_carts)
+    
+    cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {len(user_carts[uid])} صنف )", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ]),
         parse_mode=ParseMode.HTML
@@ -270,10 +267,12 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
+        
+        cnt = len(user_carts[uid])
         await update.message.reply_text(
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {len(user_carts[uid])} صنف )", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ]),
             parse_mode=ParseMode.HTML
@@ -355,15 +354,8 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
         await query.message.reply_text("🛒 <b>الفاتورة فارغة.</b>", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
         return
-    
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
-            try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
-            except: pass
-    sent_delete_messages[uid] = []
 
-    m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
-    sent_delete_messages[uid].append(m_head.message_id)
+    await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
     
     for idx, it in enumerate(cart, 1):
         p_price = it.get('price', 0)
@@ -377,10 +369,9 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"❌ حذف هذا الصنف (رقم {idx})", callback_data=f"del_{idx-1}")]])
         
         if it.get("photo_id"):
-            m_item = await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
+            await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
         else:
-            m_item = await query.message.reply_text(cap, reply_markup=kb, parse_mode=ParseMode.HTML)
-        sent_delete_messages[uid].append(m_item.message_id)
+            await query.message.reply_text(cap, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -388,13 +379,7 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     uid = str(update.effective_user.id)
     idx = int(query.data.replace("del_", ""))
     
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
-            try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
-            except: pass
-        sent_delete_messages[uid] = []
-    
-    if 0 <= idx < len(user_carts[uid]):
+    if 0 <= idx < len(user_carts.get(uid, [])):
         rem = user_carts[uid].pop(idx)
         if rem.get("link"):
             user_last_channel[uid] = rem["link"]
