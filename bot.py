@@ -3,7 +3,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# بيانات البوت والقناة
 BOT_TOKEN = "8626819929:AAFebq03VxiW6cU_-a_3_Rpy8_-hYr0VhQQ"
 BOT_USERNAME = "Mahmoud_mohammed_bot"
 WHATSAPP_NUMBER = "201000744741"
@@ -42,19 +41,19 @@ def parse_post_text(text):
         if "كود" in cl:
             d = re.findall(r'\d+', l)
             if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون", "ماركه", "ماركة"]):
-            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن|ماركه|ماركة)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
+        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن"]):
+            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
     if not title: title = lines[0]
     title += code
     
     fc = clean_str(text)
-    if "ربع دسته" in fc or "ربع دستة" in fc: min_qty = 3
-    elif "نص دسته" in fc or "نصف دسته" in fc or "نص دستة" in fc or "نصف دستة" in fc: min_qty = 6
-    elif "دسته" in fc or "دستة" in fc: min_qty = 12
+    if "ربع دسته" in fc: min_qty = 3
+    elif "نص دسته" in fc or "نصف دسته" in fc: min_qty = 6
+    elif "دسته" in fc: min_qty = 12
     
     for l in lines:
         cl = clean_str(l)
-        if "سعر الدسته" in cl or "الدسته" in cl or "سعر الدستة" in cl or "الدستة" in cl:
+        if "سعر الدسته" in cl or "الدسته" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d:
                 doz_price = float(d[0])
@@ -62,7 +61,7 @@ def parse_post_text(text):
                 
     for l in lines:
         cl = clean_str(l)
-        if "القطعه" in cl or "سعر القطعه" in cl or "القطعة" in cl or "سعر القطعة" in cl:
+        if "القطعه" in cl or "سعر القطعه" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d:
                 unit_price = float(d[0])
@@ -167,8 +166,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_data(CHANNELS_FILE, user_last_channel)
 
             pt = f"{p['price']} ج.م للقطعة" if p.get('price', 0) > 0 else "حسب المنشور"
-            doz_str = f" | سعر الدستة: {p['doz_price']} ج.م" if p.get('doz_price', 0) > 0 else ""
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}{doz_str}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
             kb = generate_quantity_keyboard(pid, p['min_qty'])
             if p.get("photo_id"):
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -421,5 +419,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
-    app.run_polling(drop_pending_updates=True)
-    
+    app.run_polling()
+                                                  
