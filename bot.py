@@ -1,4 +1,4 @@
-import logging, re, urllib.parse, json, os, html, time
+import logging, re, urllib.parse, html, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -8,29 +8,12 @@ BOT_USERNAME = "Mahmoud_mohammed_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/portsaid_clothing"
 
-DB_FILE, CARTS_FILE, CONFIG_FILE, CHANNELS_FILE = "products_db.json", "user_carts.json", "bot_config.json", "user_channels.json"
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-def load_data(p):
-    if os.path.exists(p):
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-def save_data(p, d):
-    try:
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-products_db = load_data(DB_FILE)
-user_carts = load_data(CARTS_FILE)
-bot_config = load_data(CONFIG_FILE)
-user_last_channel = load_data(CHANNELS_FILE)
+# تخزين دائم في الذاكرة
+products_db = {}
+user_carts = {}
+user_last_channel = {}
 user_state = {}
 user_last_action_time = {}
 
@@ -38,7 +21,7 @@ def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
 def get_user_channel(uid):
-    return user_last_channel.get(str(uid), bot_config.get("channel_link", DEFAULT_CHANNEL_LINK))
+    return user_last_channel.get(str(uid), DEFAULT_CHANNEL_LINK)
 
 def parse_post_text(text):
     text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
@@ -150,15 +133,15 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         data["photo_id"] = post.photo[-1].file_id if post.photo else None
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
-            data["channel_base"] = f"https://t.me/{post.chat.username}"
         else:
             cid = str(post.chat.id).replace('-100', '')
             data["link"] = f"https://t.me/c/{cid}/{post.message_id}"
-            data["channel_base"] = f"https://t.me/c/{cid}"
+            
         products_db[pid] = data
-        save_data(DB_FILE, products_db)
-        try: await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
-        except: pass
+        try:
+            await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
+        except:
+            pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -166,28 +149,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     now = time.time()
     
-    if uid not in user_carts: user_carts[uid] = []
+    if uid not in user_carts:
+        user_carts[uid] = []
 
     if args and len(args) > 0 and args[0].startswith("buy_"):
         user_last_action_time[uid] = now
         pid = str(args[0].replace("buy_", ""))
-        p = products_db.get(pid)
-        if p:
-            c_link = p.get("link") or p.get("channel_base")
-            if c_link:
-                user_last_channel[uid] = c_link
-                save_data(CHANNELS_FILE, user_last_channel)
+        p = products_db.get(pid, {
+            "title": "موديل من القناة",
+            "price": 0.0,
+            "doz_price": 0.0,
+            "min_qty": 3,
+            "photo_id": None,
+            "link": DEFAULT_CHANNEL_LINK
+        })
 
-            pt = f"{p['price']} ج.م للقطعة" if p.get('price', 0) > 0 else "حسب المنشور"
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
-            kb = generate_quantity_keyboard(pid, p['min_qty'])
-            if p.get("photo_id"):
-                await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            else:
-                await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
+        c_link = p.get("link", DEFAULT_CHANNEL_LINK)
+        user_last_channel[uid] = c_link
 
-    if now - user_last_action_time.get(uid, 0) < 2.0:
+        pt = f"{p['price']} ج.م للقطعة" if p.get('price', 0) > 0 else "سعر خاص للجملة"
+        msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
+        kb = generate_quantity_keyboard(pid, p['min_qty'])
+        
+        if p.get("photo_id"):
+            await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        else:
+            await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
+
+    if now - user_last_action_time.get(uid, 0) < 1.5:
         return
 
     cnt = len(user_carts.get(uid, []))
@@ -206,14 +196,19 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     uid = str(update.effective_user.id)
     parts = query.data.split("_")
     pid, qty = str(parts[1]), int(parts[2])
-    p = products_db.get(pid)
-    if not p: return
+    
+    p = products_db.get(pid, {
+        "title": "موديل جملة",
+        "price": 0.0,
+        "doz_price": 0.0,
+        "link": get_user_channel(uid),
+        "photo_id": None
+    })
     
     tot = calculate_item_total(p, qty)
     lbl = get_quantity_label(qty)
     p_link = p.get("link", get_user_channel(uid))
     user_last_channel[uid] = p_link
-    save_data(CHANNELS_FILE, user_last_channel)
     
     if uid not in user_carts:
         user_carts[uid] = []
@@ -222,13 +217,12 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "title": p['title'],
         "qty": qty,
         "label": lbl,
-        "price": p['price'],
-        "doz_price": p.get('doz_price', round(p['price']*12, 2)),
+        "price": p.get('price', 0.0),
+        "doz_price": p.get('doz_price', 0.0),
         "total": tot,
         "link": p_link,
         "photo_id": p.get("photo_id")
     })
-    save_data(CARTS_FILE, user_carts)
     
     cnt = len(user_carts[uid])
     await query.message.reply_text(
@@ -244,8 +238,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid, pid = str(update.effective_user.id), str(query.data.replace("custom_", ""))
-    p = products_db.get(pid)
-    if not p: return
+    p = products_db.get(pid, {"title": "الموديل المختار"})
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
     await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})\n• مثل 9 أو 10 أو 11 وهكذا العدد الي تحتاجه", parse_mode=ParseMode.HTML)
 
@@ -262,22 +255,20 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         lbl = get_quantity_label(qty)
         p_link = p.get("link", get_user_channel(uid))
         user_last_channel[uid] = p_link
-        save_data(CHANNELS_FILE, user_last_channel)
         
         if uid not in user_carts:
             user_carts[uid] = []
             
         user_carts[uid].append({
-            "title": p['title'],
+            "title": p.get('title', 'موديل ملابس'),
             "qty": qty,
             "label": lbl,
-            "price": p['price'],
-            "doz_price": p.get('doz_price', round(p['price']*12, 2)),
+            "price": p.get('price', 0.0),
+            "doz_price": p.get('doz_price', 0.0),
             "total": tot,
             "link": p_link,
             "photo_id": p.get("photo_id")
         })
-        save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
         
         cnt = len(user_carts[uid])
@@ -294,14 +285,7 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    
-    # قراءة السلة المحدثة فوراً
     cart = user_carts.get(uid, [])
-    if not cart:
-        cart_disk = load_data(CARTS_FILE).get(uid, [])
-        if cart_disk:
-            user_carts[uid] = cart_disk
-            cart = cart_disk
 
     if not cart:
         kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
@@ -311,8 +295,8 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = []
     last_link = cart[-1].get("link", get_user_channel(uid)) if cart else get_user_channel(uid)
     for i, it in enumerate(cart, 1):
-        pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
-        ti = f" = {it['total']}ج" if it['total'] > 0 else ""
+        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
         lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>{pi}{ti}\n🖼️ <a href='{it['link']}'>رابط الموديل</a>")
         
     tot_sum = sum(it.get('total', 0) for it in cart)
@@ -339,10 +323,10 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     lines_wa, tot_sum = [], 0
     for i, it in enumerate(cart, 1):
-        pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
-        ti = f" = {it['total']}ج" if it['total'] > 0 else ""
+        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
         lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
-        tot_sum += it['total']
+        tot_sum += it.get('total', 0)
         
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
     tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_val} ج.م" if tot_sum > 0 else ""
@@ -351,7 +335,6 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
     user_carts[uid] = []
-    save_data(CARTS_FILE, user_carts)
     
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح الواتساب وإرسال الفاتورة الآن", url=wa_link)]])
     await query.message.reply_text(
@@ -396,27 +379,15 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if 0 <= idx < len(user_carts.get(uid, [])):
         rem = user_carts[uid].pop(idx)
-        if rem.get("link"):
-            user_last_channel[uid] = rem["link"]
-            save_data(CHANNELS_FILE, user_last_channel)
-        save_data(CARTS_FILE, user_carts)
         await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
     
-    # عرض الفاتورة بعد الحذف
     await view_cart(update, context)
 
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    
-    cart = user_carts.get(uid, [])
-    if cart and cart[-1].get("link"):
-        user_last_channel[uid] = cart[-1]["link"]
-        save_data(CHANNELS_FILE, user_last_channel)
-        
     user_carts[uid] = []
-    save_data(CARTS_FILE, user_carts)
     
     kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
     await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
@@ -433,6 +404,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    print("البوت يعمل الآن بكفاءة...")
     app.run_polling(drop_pending_updates=True)
     
