@@ -1,4 +1,4 @@
-Import logging, re, urllib.parse, json, os, html
+import logging, re, urllib.parse, json, os, html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
