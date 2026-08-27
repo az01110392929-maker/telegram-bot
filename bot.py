@@ -1,4 +1,4 @@
-import logging, re, urllib.parse, json, os, html
+Import logging, re, urllib.parse, json, os, html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -348,7 +348,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for mid in sent_delete_messages[uid]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
             except: pass
-        sent_delete_messages[uid] = []
+    sent_delete_messages[uid] = []
 
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
@@ -422,4 +422,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
     app.run_polling(drop_pending_updates=True)
-        
+    
