@@ -3,7 +3,6 @@ import re
 import html
 import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.request import HTTPXRequest
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -316,8 +315,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === تشغيل البوت وإعدادات الاتصال ===
 if __name__ == "__main__":
-    req = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
-    app = ApplicationBuilder().token(BOT_TOKEN).request(req).get_updates_request(req).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
@@ -325,5 +323,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("...البوت يعمل الآن بكفاءة وثبات")
-    app.run_polling(poll_interval=1.0, timeout=20)
-    
+    app.run_polling(drop_pending_updates=True)
