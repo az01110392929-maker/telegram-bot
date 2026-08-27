@@ -1,4 +1,4 @@
-import logging, re, urllib.parse, html, base64, json, sqlite3
+import logging, re, urllib.parse, html, sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -11,10 +11,17 @@ DB_NAME = "store_bot.db"
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# تهيئة قاعدة البيانات المحلية
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS products (
+        pid TEXT PRIMARY KEY,
+        title TEXT,
+        price REAL,
+        doz_price REAL,
+        min_qty INTEGER,
+        link TEXT
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS cart_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uid TEXT,
@@ -24,8 +31,7 @@ def init_db():
         price REAL,
         doz_price REAL,
         total REAL,
-        link TEXT,
-        photo_url TEXT
+        link TEXT
     )''')
     conn.commit()
     conn.close()
@@ -38,23 +44,41 @@ def clean_str(s):
     s = re.sub(r'(.)\1+', r'\1', s)
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
-# دوال السلة
+def db_save_product(pid, data):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('''INSERT OR REPLACE INTO products (pid, title, price, doz_price, min_qty, link)
+                 VALUES (?, ?, ?, ?, ?, ?)''',
+              (str(pid), data['title'], data['price'], data['doz_price'], data['min_qty'], data['link']))
+    conn.commit()
+    conn.close()
+
+def db_get_product(pid):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('SELECT title, price, doz_price, min_qty, link FROM products WHERE pid = ?', (str(pid),))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'title': row[0], 'price': row[1], 'doz_price': row[2], 'min_qty': row[3], 'link': row[4]}
+    return None
+
 def db_add_to_cart(uid, item):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('''INSERT INTO cart_items (uid, title, qty, label, price, doz_price, total, link, photo_url)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (str(uid), item['title'], item['qty'], item['label'], item['price'], item['doz_price'], item['total'], item['link'], item.get('photo_url', '')))
+    c.execute('''INSERT INTO cart_items (uid, title, qty, label, price, doz_price, total, link)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+              (str(uid), item['title'], item['qty'], item['label'], item['price'], item['doz_price'], item['total'], item['link']))
     conn.commit()
     conn.close()
 
 def db_get_cart(uid):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('SELECT id, title, qty, label, price, doz_price, total, link, photo_url FROM cart_items WHERE uid = ?', (str(uid),))
+    c.execute('SELECT id, title, qty, label, price, doz_price, total, link FROM cart_items WHERE uid = ?', (str(uid),))
     rows = c.fetchall()
     conn.close()
-    return [{'id': r[0], 'title': r[1], 'qty': r[2], 'label': r[3], 'price': r[4], 'doz_price': r[5], 'total': r[6], 'link': r[7], 'photo_url': r[8]} for r in rows]
+    return [{'id': r[0], 'title': r[1], 'qty': r[2], 'label': r[3], 'price': r[4], 'doz_price': r[5], 'total': r[6], 'link': r[7]} for r in rows]
 
 def db_delete_cart_item(item_id):
     conn = sqlite3.connect(DB_NAME)
@@ -70,7 +94,6 @@ def db_clear_cart(uid):
     conn.commit()
     conn.close()
 
-# استخراج نصوص المنشورات
 def parse_post_text(text):
     text_nums = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
     lines = [l.strip() for l in text_nums.split("\n") if l.strip()]
@@ -81,7 +104,7 @@ def parse_post_text(text):
     if code_match:
         code = f" (كود {code_match.group(1)})"
 
-    keywords = ["ليجن", "كارينا", "فيزون", "توب", "بادي", "ماركه", "ماركة", "اسم الموديل", "الموديل", "موديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت"]
+    keywords = ["كلون", "كولون", "ليجن", "كارينا", "فيزون", "توب", "بادي", "ماركه", "ماركة", "اسم الموديل", "الموديل", "موديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت"]
     
     for l in lines:
         cl = clean_str(l)
@@ -126,7 +149,7 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
         
-    return {"title": title[:60], "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
+    return {"title": title[:50], "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
 def calculate_item_total(p, qty):
     if p.get('doz_price', 0) > 0:
@@ -157,7 +180,7 @@ def get_quantity_label(qty):
     elif rem == 9: return f"{doz + 1} دسته إلا ربع ({int(qty)} قطعة)"
     return f"{int(qty)} قطعة"
 
-def generate_quantity_keyboard(min_qty):
+def generate_quantity_keyboard(post_id, min_qty):
     kb = []
     if min_qty >= 12:
         q_list = [(12,"1 دسته"),(24,"2 دسته"),(36,"3 دسته"),(48,"4 دسته"),(60,"5 دسته"),(72,"6 دسته"),(120,"10 دسته")]
@@ -169,70 +192,54 @@ def generate_quantity_keyboard(min_qty):
     row = []
     for q, n in q_list:
         if q >= min_qty:
-            row.append(InlineKeyboardButton(f"📦 {n} ({q} ق)", callback_data=f"add_{q}"))
+            row.append(InlineKeyboardButton(f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
             if len(row) == 2: kb.append(row); row = []
     if row: kb.append(row)
-    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")])
+    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
     return InlineKeyboardMarkup(kb)
 
-# استقبال منشورات القناة وتوليد الرابط الذاتي
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post
     if not post: return
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
+        pid = str(post.message_id)
         post_link = f"https://t.me/{post.chat.username}/{post.message_id}" if post.chat.username else DEFAULT_CHANNEL_LINK
+        data["link"] = post_link
         
-        # رابط لمعاينة الصورة من تيليجرام
-        photo_link = f"{post_link}?single" if post.photo else post_link
-        
-        payload = {
-            "t": data["title"],
-            "p": data["price"],
-            "d": data["doz_price"],
-            "m": data["min_qty"],
-            "l": post_link,
-            "img": photo_link
-        }
-        encoded_data = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        deep_link = f"https://t.me/{BOT_USERNAME}?start=b_{encoded_data}"
+        db_save_product(pid, data)
+        deep_link = f"https://t.me/{BOT_USERNAME}?start=item_{pid}"
         
         try:
             await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=deep_link)]]))
         except Exception as e:
             logging.error(f"Post edit error: {e}")
 
-# أمر البدء واختيار الموديل
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     uid = str(update.effective_user.id)
     args = context.args
 
-    if args and len(args) > 0 and args[0].startswith("b_"):
-        try:
-            raw_b64 = args[0][2:]
-            padded = raw_b64 + "=" * (-len(raw_b64) % 4)
-            p_data = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
-            
+    # التعرف على كود الموديل سواء كان item_ أو buy_
+    if args and len(args) > 0 and (args[0].startswith("item_") or args[0].startswith("buy_")):
+        pid = args[0].replace("item_", "").replace("buy_", "")
+        p = db_get_product(pid)
+        if not p:
             p = {
-                "title": p_data.get("t", "موديل جملة"),
-                "price": float(p_data.get("p", 0.0)),
-                "doz_price": float(p_data.get("d", 0.0)),
-                "min_qty": int(p_data.get("m", 3)),
-                "link": p_data.get("l", DEFAULT_CHANNEL_LINK),
-                "photo_url": p_data.get("img", DEFAULT_CHANNEL_LINK)
+                "title": f"موديل رقم {pid}",
+                "price": 0.0,
+                "doz_price": 0.0,
+                "min_qty": 3,
+                "link": DEFAULT_CHANNEL_LINK
             }
-            user_state[uid] = {"product": p}
 
-            price_text = f"{p['price']} ج.م للقطعة" if p['price'] > 0 else "سعر خاص للجملة"
-            doz_text = f" | سعر الدستة: {p['doz_price']} ج.م" if p['doz_price'] > 0 else ""
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {price_text}{doz_text}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
-            
-            await update.message.reply_text(msg, reply_markup=generate_quantity_keyboard(p['min_qty']), parse_mode=ParseMode.HTML)
-            return
-        except Exception as e:
-            logging.error(f"Deep link decode error: {e}")
+        price_text = f"{p['price']} ج.م للقطعة" if p['price'] > 0 else "سعر خاص للجملة"
+        doz_text = f" | سعر الدستة: {p['doz_price']} ج.م" if p['doz_price'] > 0 else ""
+        msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {price_text}{doz_text}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
+        
+        await update.message.reply_text(msg, reply_markup=generate_quantity_keyboard(pid, p['min_qty']), parse_mode=ParseMode.HTML)
+        return
 
     cart = db_get_cart(uid)
     cnt = len(cart)
@@ -245,21 +252,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML
     )
 
-# معالجة الضغط على كميات الدست
 async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    qty = int(query.data.replace("add_", ""))
+    parts = query.data.split("_")
+    pid, qty = parts[1], int(parts[2])
     
-    st = user_state.get(uid, {})
-    p = st.get("product", {
+    p = db_get_product(pid) or {
         "title": "موديل جملة",
         "price": 0.0,
         "doz_price": 0.0,
-        "link": DEFAULT_CHANNEL_LINK,
-        "photo_url": DEFAULT_CHANNEL_LINK
-    })
+        "link": DEFAULT_CHANNEL_LINK
+    }
     
     tot = calculate_item_total(p, qty)
     lbl = get_quantity_label(qty)
@@ -272,8 +277,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "price": p.get('price', 0.0),
         "doz_price": p.get('doz_price', 0.0),
         "total": tot,
-        "link": p_link,
-        "photo_url": p.get('photo_url', p_link)
+        "link": p_link
     }
     db_add_to_cart(uid, item)
     
@@ -292,9 +296,9 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    st = user_state.get(uid, {})
-    p = st.get("product", {"title": "الموديل المختار"})
-    user_state[uid]["action"] = "waiting_custom_qty"
+    pid = query.data.replace("custom_", "")
+    p = db_get_product(pid) or {"title": "الموديل المختار", "link": DEFAULT_CHANNEL_LINK}
+    user_state[uid] = {"action": "waiting_custom_qty", "product": p}
     await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})\n• مثل 9 أو 10 أو 11 وهكذا العدد الي تحتاجه", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -302,7 +306,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     state = user_state.get(uid)
     if state and state.get("action") == "waiting_custom_qty":
         txt = clean_str(update.message.text.strip())
-        p = state.get("product", {"title": "موديل ملابس", "price": 0.0, "doz_price": 0.0, "link": DEFAULT_CHANNEL_LINK, "photo_url": DEFAULT_CHANNEL_LINK})
+        p = state.get("product", {"title": "موديل ملابس", "price": 0.0, "doz_price": 0.0, "link": DEFAULT_CHANNEL_LINK})
         d = re.findall(r'\d+', txt)
         if not d: await update.message.reply_text("⚠️ أدخل رقماً صحيحاً."); return
         qty = int(d[0]) * 12
@@ -317,11 +321,10 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             "price": p.get('price', 0.0),
             "doz_price": p.get('doz_price', 0.0),
             "total": tot,
-            "link": p_link,
-            "photo_url": p.get('photo_url', p_link)
+            "link": p_link
         }
         db_add_to_cart(uid, item)
-        user_state[uid].pop("action", None)
+        user_state.pop(uid, None)
         
         cart = db_get_cart(uid)
         cnt = len(cart)
@@ -334,7 +337,6 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode=ParseMode.HTML
         )
 
-# عرض الفاتورة
 async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -366,7 +368,6 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await query.message.reply_text(summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
-# إرسال الفاتورة عبر واتساب مع رابط الصورة ورابط الموديل
 async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -380,8 +381,6 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        
-        # تجهيز نص الصنف مع رابط الموديل والصورة
         item_text = (
             f"*{i}. {it['title']}*\n"
             f"📦 الكمية: {it['label']}{pi}{ti}\n"
@@ -394,7 +393,7 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tot_txt_wa = f"\n\n💰 *إجمالي الفاتورة الكلي:* {tot_val} ج.م" if tot_sum > 0 else ""
     
     wa_msg = (
-        "🛍️ *طلب جملة جديد من القناة:*\n"
+        "🛍️ *طلب جملة جديد من متجر بورسعيد:*\n"
         "------------------------------------\n\n"
         + "\n\n".join(lines_wa)
         + tot_txt_wa
@@ -414,7 +413,6 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML
     )
 
-# إدارة وحذف الأصناف
 async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -463,8 +461,9 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_\\d+$"))
-    app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_qty$"))
+    app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     app.run_polling(drop_pending_updates=True)
+    
