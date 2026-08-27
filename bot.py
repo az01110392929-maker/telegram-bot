@@ -118,7 +118,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     items_count = len(cart["items"])
-    cart_btn_text = f"🛒 عرض الفاتورة ({items_count} صنف)" if items_count > 0 else "🛒 عرض الفاتورة الحالية"
+    cart_btn_text = f"عرض الفاتورة ({items_count} صنف) 🛒" if items_count > 0 else "عرض الفاتورة الحالية 🛒"
 
     welcome_text = (
         "مرحباً بك في متجر الجملة للملابس - شركة بورسعيد 🛍️✨\n\n"
@@ -208,7 +208,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items_count = len(cart["items"])
         text = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
         keyboard = [
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
+            [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
             [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
             [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
         ]
@@ -305,7 +305,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             items_count = len(cart["items"])
             msg = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
             keyboard = [
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
+                [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
                 [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
                 [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
             ]
@@ -334,4 +334,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
