@@ -1,6 +1,9 @@
 import os
+import re
+import html
 import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -10,11 +13,11 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# === البيانات الأساسية ===
-BOT_TOKEN = "8626819929:AAG3Q_0oxkgIZP_IYnmL4jK9L0M1N2P3Q"  # تأكد من توكن البوت الخاص بك
-WHATSAPP_NUMBER = "201000744741"  # رقم الواتساب بالصيغة الدولية بدون علامة +
+# === إعدادات البوت والواتساب ===
+BOT_TOKEN = "8626819929:AAG3Q_0oxkgIZP_IYnmL4jK9L0M1N2P3Q"
+WHATSAPP_NUMBER = "201000744741"
 
-# === الأقسام والموديلات ===
+# === الأقسام الافتراضية ===
 CATEGORIES = {
     "cat_abayat": "عبايات واستقبال",
     "cat_pajamas": "بيجامات وترنجات بيتي",
@@ -23,24 +26,94 @@ CATEGORIES = {
     "cat_casual": "ملابس خروج وكاجوال"
 }
 
-# === ذاكرة التخزين المؤقتة ===
+# === هياكل تخزين البيانات المؤقتة ===
 user_carts = {}
+product_catalog = {}
 
 def get_cart(user_id):
     if user_id not in user_carts:
-        user_carts[user_id] = {"items": [], "state": None, "temp_item": None}
+        user_carts[user_id] = {
+            "items": [],
+            "state": None,
+            "temp_item": None,
+            "temp_price": 0.0,
+            "temp_code": ""
+        }
     return user_carts[user_id]
 
-# === دوال الأوامر والرسائل ===
+# === دالة استخراج وتنظيف نصوص المنشورات وإزالة الكشيدة والزخارف ===
+def parse_post_text(text: str):
+    if not text:
+        return {"code": "", "price": 0.0, "clean_title": "موديل ملابس"}
+    
+    # إزالة الكشيدة (التطويل) والرموز التعبيرية والزخارف الفاصلة
+    clean = re.sub(r'[\u0640]', '', text)
+    clean = re.sub(r'[\~_\*`#@]', ' ', clean)
+    clean = re.sub(r'[^\w\s\d\.\:\-\/]', ' ', clean)
+    clean = ' '.join(clean.split())
+
+    # استخراج كود الموديل
+    code_match = re.search(r'(?:كود|الكود|موديل|رقم)\s*[:\-]?\s*([A-Za-z0-9\-_]+)', clean)
+    code = code_match.group(1) if code_match else ""
+
+    # استخراج السعر بالجملة أو الدستة أو القطعة
+    price = 0.0
+    price_match = re.search(r'(?:السعر|سعر|جملة|جمله|ج)\s*[:\-]?\s*(\d+(?:\.\d+)?)', clean)
+    if not price_match:
+        price_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:ج|جنيه|جنية|EGP)', clean)
+    
+    if price_match:
+        try:
+            price = float(price_match.group(1))
+        except ValueError:
+            price = 0.0
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title = lines[0][:40] if lines else "موديل جديد"
+
+    return {
+        "code": code,
+        "price": price,
+        "clean_title": title
+    }
+
+# === لوحات التحكم والمفاتيح التفاعلية ===
+def get_quantity_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("ربع دسته (3 ق)", callback_data="qty_0.25"),
+            InlineKeyboardButton("نص دسته (6 ق)", callback_data="qty_0.5"),
+        ],
+        [
+            InlineKeyboardButton("دسته إلا ربع (9 ق)", callback_data="qty_0.75"),
+            InlineKeyboardButton("1 دسته (12 ق)", callback_data="qty_1.0"),
+        ],
+        [
+            InlineKeyboardButton("دسته وربع (15 ق)", callback_data="qty_1.25"),
+            InlineKeyboardButton("دسته ونص (18 ق)", callback_data="qty_1.5"),
+        ],
+        [
+            InlineKeyboardButton("2 دسته (24 ق)", callback_data="qty_2.0"),
+            InlineKeyboardButton("3 دسته (36 ق)", callback_data="qty_3.0"),
+        ],
+        [
+            InlineKeyboardButton("4 دسته (48 ق)", callback_data="qty_4.0"),
+            InlineKeyboardButton("5 دسته (60 ق)", callback_data="qty_5.0"),
+        ],
+        [InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")],
+        [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
+    ])
+
+# === الأوامر ومعالجة رسائل البدء ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
     cart["state"] = None
     cart["temp_item"] = None
-    
+
     welcome_text = (
         "مرحباً بك في متجر الجملة للملابس - شركة بورسعيد 🛍️✨\n\n"
-        "يمكنك اختيار الموديل وتحديد الكميات بالدستة وسنقوم بتجهيز الفاتورة وإرسالها مباشرة إلى الواتساب."
+        "يمكنك طلب الموديلات مباشرة واختيار الكميات بالدستة وسنقوم بحساب الإجمالي وإرسال الفاتورة تلقائياً للواتساب."
     )
     
     keyboard = [
@@ -49,12 +122,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     if update.message:
         await update.message.reply_text(welcome_text, reply_markup=reply_markup)
     elif update.callback_query:
         await update.callback_query.message.edit_text(welcome_text, reply_markup=reply_markup)
 
+# === معالجة منشورات القناة وتوليد أزرار الطلب التلقائية ===
+async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    post = update.channel_post
+    if not post:
+        return
+
+    text = post.caption if post.caption else post.text
+    if not text:
+        return
+
+    parsed = parse_post_text(text)
+    item_label = parsed["clean_title"]
+    if parsed["code"]:
+        item_label = f"كود {parsed['code']} - {item_label}"
+
+    bot_username = (await context.bot.get_me()).username
+    deep_link = f"https://t.me/{bot_username}?start=item_{parsed['code'] or 'auto'}"
+
+    keyboard = [
+        [InlineKeyboardButton("🛍️ اطلب هذا الموديل بالجملة", url=deep_link)]
+    ]
+    
+    try:
+        if post.caption:
+            await post.edit_caption(caption=post.caption, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await post.edit_text(text=post.text, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        print(f"Post Update Error: {e}")
+
+# === إدارة الضغط على الأزرار (Callbacks) ===
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -66,7 +170,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
     elif data == "show_catalog":
-        text = "اختر القسم المطلوب لتحديد الموديل والكمية:"
+        text = "اختر القسم المطلوب لتصفح الموديلات وتحديد الكميات:"
         keyboard = []
         for cat_id, cat_name in CATEGORIES.items():
             keyboard.append([InlineKeyboardButton(cat_name, callback_data=f"cat_{cat_name}")])
@@ -76,45 +180,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("cat_"):
         cat_name = data.replace("cat_", "")
         cart["temp_item"] = cat_name
-        
+        cart["temp_code"] = ""
+        cart["temp_price"] = 0.0
+
         text = f"📦 القسم المختار: *{cat_name}*\n\nاختر الكمية المطلوبة بالجملة:"
-        keyboard = [
-            [
-                InlineKeyboardButton("ربع دسته (3 ق)", callback_data="qty_0.25"),
-                InlineKeyboardButton("نص دسته (6 ق)", callback_data="qty_0.5"),
-            ],
-            [
-                InlineKeyboardButton("دسته إلا ربع (9 ق)", callback_data="qty_0.75"),
-                InlineKeyboardButton("1 دسته (12 ق)", callback_data="qty_1.0"),
-            ],
-            [
-                InlineKeyboardButton("دسته وربع (15 ق)", callback_data="qty_1.25"),
-                InlineKeyboardButton("دسته ونص (18 ق)", callback_data="qty_1.5"),
-            ],
-            [
-                InlineKeyboardButton("2 دسته (24 ق)", callback_data="qty_2.0"),
-                InlineKeyboardButton("3 دسته (36 ق)", callback_data="qty_3.0"),
-            ],
-            [
-                InlineKeyboardButton("4 دسته (48 ق)", callback_data="qty_4.0"),
-                InlineKeyboardButton("5 دسته (60 ق)", callback_data="qty_5.0"),
-            ],
-            [InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")],
-            [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
-        ]
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await query.message.edit_text(text, reply_markup=get_quantity_keyboard(), parse_mode="Markdown")
 
     elif data.startswith("qty_"):
         qty_val = float(data.replace("qty_", ""))
         item_name = cart.get("temp_item", "موديل ملابس")
         pieces = int(qty_val * 12)
-        
+
         cart["items"].append({
             "name": item_name,
             "qty": qty_val,
-            "pieces": pieces
+            "pieces": pieces,
+            "code": cart.get("temp_code", ""),
+            "price": cart.get("temp_price", 0.0)
         })
-        
+
         text = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) من *{item_name}* بنجاح!"
         keyboard = [
             [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="show_cart")],
@@ -145,19 +229,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         summary_lines = []
         total_dozens = 0.0
         total_pieces = 0
-        
+
         wa_text = "طلب جملة جديد من متجر بورسعيد:\n\n"
-        
+
         for idx, item in enumerate(cart["items"], 1):
-            summary_lines.append(f"{idx}. {item['name']}: {item['qty']} دسته ({item['pieces']} قطعة)")
-            wa_text += f"- {item['name']}: {item['qty']} دسته ({item['pieces']} قطعة)\n"
+            code_str = f" (كود: {item['code']})" if item.get("code") else ""
+            line_desc = f"{idx}. {item['name']}{code_str}: {item['qty']} دسته ({item['pieces']} قطعة)"
+            summary_lines.append(line_desc)
+            wa_text += f"- {item['name']}{code_str}: {item['qty']} دسته ({item['pieces']} قطعة)\n"
             total_dozens += item["qty"]
             total_pieces += item["pieces"]
-            
-        wa_text += f"\nالإجمالي: {total_dozens} دسته ({total_pieces} قطعة)"
+
+        wa_text += f"\n🔢 إجمالي الدست: {total_dozens} دسته\n📦 إجمالي القطع: {total_pieces} قطعة"
         encoded_wa_text = urllib.parse.quote(wa_text)
         wa_url = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa_text}"
-        
+
         text = (
             "📋 *تفاصيل الفاتورة والطلب:*\n\n"
             + "\n".join(summary_lines)
@@ -165,7 +251,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             + f"\n📦 *إجمالي القطع:* {total_pieces} قطعة"
             + "\n\nاضغط بالأسفل لإرسال الفاتورة عبر الواتساب مباشرة 👇"
         )
-        
+
         keyboard = [
             [InlineKeyboardButton("📲 إرسال الطلب عبر الواتساب", url=wa_url)],
             [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
@@ -185,28 +271,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+# === معالجة الرسائل النصية المباشرة وإدخال الكميات المخصصة ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
     text = update.message.text.strip()
-    
+
     if cart.get("state") == "waiting_custom_qty":
         try:
             qty_val = float(text)
             if qty_val <= 0:
                 await update.message.reply_text("يرجى إدخال رقم موجب صحيح أو عشري (مثال: 5 أو 2.5).")
                 return
-            
+
             item_name = cart.get("temp_item", "موديل ملابس")
             pieces = int(qty_val * 12)
-            
+
             cart["items"].append({
                 "name": item_name,
                 "qty": qty_val,
-                "pieces": pieces
+                "pieces": pieces,
+                "code": cart.get("temp_code", ""),
+                "price": cart.get("temp_price", 0.0)
             })
             cart["state"] = None
-            
+
             msg = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) بنجاح!"
             keyboard = [
                 [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="show_cart")],
@@ -217,15 +306,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("عفواً، يرجى كتابة الرقم بالأرقام فقط (مثال: 7 أو 10).")
 
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+# === تشغيل البوت وإعدادات الاتصال المتقدمة ===
+if __name__ == "__main__":
+    req = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
+    app = ApplicationBuilder().token(BOT_TOKEN).request(req).get_updates_request(req).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.TEXT | filters.CAPTION), handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    print("البوت قيد التشغيل...")
-    app.run_polling()
 
-if __name__ == "__main__":
-    main()
+    print("...البوت يعمل الآن بكفاءة وثبات")
+    app.run_polling(poll_interval=1.0, timeout=20)
     
