@@ -28,7 +28,6 @@ CATEGORIES = {
 
 # === هياكل تخزين البيانات المؤقتة ===
 user_carts = {}
-product_catalog = {}
 
 def get_cart(user_id):
     if user_id not in user_carts:
@@ -41,22 +40,19 @@ def get_cart(user_id):
         }
     return user_carts[user_id]
 
-# === دالة استخراج وتنظيف نصوص المنشورات وإزالة الكشيدة والزخارف ===
+# === دالة استخراج وتنظيف نصوص المنشورات ===
 def parse_post_text(text: str):
     if not text:
         return {"code": "", "price": 0.0, "clean_title": "موديل ملابس"}
     
-    # إزالة الكشيدة (التطويل) والرموز التعبيرية والزخارف الفاصلة
     clean = re.sub(r'[\u0640]', '', text)
     clean = re.sub(r'[\~_\*`#@]', ' ', clean)
     clean = re.sub(r'[^\w\s\d\.\:\-\/]', ' ', clean)
     clean = ' '.join(clean.split())
 
-    # استخراج كود الموديل
     code_match = re.search(r'(?:كود|الكود|موديل|رقم)\s*[:\-]?\s*([A-Za-z0-9\-_]+)', clean)
     code = code_match.group(1) if code_match else ""
 
-    # استخراج السعر بالجملة أو الدستة أو القطعة
     price = 0.0
     price_match = re.search(r'(?:السعر|سعر|جملة|جمله|ج)\s*[:\-]?\s*(\d+(?:\.\d+)?)', clean)
     if not price_match:
@@ -111,6 +107,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cart["state"] = None
     cart["temp_item"] = None
 
+    items_count = len(cart["items"])
+    cart_btn_text = f"🛒 عرض الفاتورة ({items_count} صنف)" if items_count > 0 else "🛒 عرض الفاتورة الحالية"
+
     welcome_text = (
         "مرحباً بك في متجر الجملة للملابس - شركة بورسعيد 🛍️✨\n\n"
         "يمكنك طلب الموديلات مباشرة واختيار الكميات بالدستة وسنقوم بحساب الإجمالي وإرسال الفاتورة تلقائياً للواتساب."
@@ -118,7 +117,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("👗 عرض الموديلات والأقسام", callback_data="show_catalog")],
-        [InlineKeyboardButton("🛒 عرض الفاتورة الحالية", callback_data="show_cart")],
+        [InlineKeyboardButton(cart_btn_text, callback_data="show_cart")],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -139,10 +138,6 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     parsed = parse_post_text(text)
-    item_label = parsed["clean_title"]
-    if parsed["code"]:
-        item_label = f"كود {parsed['code']} - {item_label}"
-
     bot_username = (await context.bot.get_me()).username
     deep_link = f"https://t.me/{bot_username}?start=item_{parsed['code'] or 'auto'}"
 
@@ -199,9 +194,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "price": cart.get("temp_price", 0.0)
         })
 
+        items_count = len(cart["items"])
         text = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) من *{item_name}* بنجاح!"
         keyboard = [
-            [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="show_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
             [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
             [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
         ]
@@ -271,7 +267,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# === معالجة الرسائل النصية المباشرة وإدخال الكميات المخصصة ===
+# === معالجة الرسائل النصية وإدخال الكميات المخصصة ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cart = get_cart(user_id)
@@ -296,9 +292,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
             cart["state"] = None
 
+            items_count = len(cart["items"])
             msg = f"✅ تمت إضافة *{qty_val} دسته* ({pieces} قطعة) بنجاح!"
             keyboard = [
-                [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="show_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة ({items_count} صنف)", callback_data="show_cart")],
                 [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
                 [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
             ]
@@ -306,7 +303,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("عفواً، يرجى كتابة الرقم بالأرقام فقط (مثال: 7 أو 10).")
 
-# === تشغيل البوت وإعدادات الاتصال المتقدمة ===
+# === تشغيل البوت وإعدادات الاتصال ===
 if __name__ == "__main__":
     req = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
     app = ApplicationBuilder().token(BOT_TOKEN).request(req).get_updates_request(req).build()
