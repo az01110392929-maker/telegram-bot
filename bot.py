@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-BOT_TOKEN = "8834711844:AAHhTJods1gDRAtE-pOzZPJmgFMuDeJJHpQ"
+BOT_TOKEN = "8834711844:AAFHANT-xseE3J37PLWwV0xcyRuXcydNKz0"
 WHATSAPP_NUMBER = "201000744741"
 CHANNEL_URL = "https://t.me/portsaid_clothing"
 
