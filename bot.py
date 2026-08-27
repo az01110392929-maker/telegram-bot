@@ -6,11 +6,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 BOT_TOKEN = "8626819929:AAFebq03VxiW6cU_-a_3_Rpy8_-hYr0VhQQ"
 BOT_USERNAME = "Mahmoud_mohammed_bot"
 WHATSAPP_NUMBER = "201000744741"
-DEFAULT_CHANNEL_LINK = "https://t.me/portsaid_clothing"
+DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# تخزين دائم في الذاكرة
 products_db = {}
 user_carts = {}
 user_last_channel = {}
