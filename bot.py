@@ -37,13 +37,16 @@ def parse_post_text(text):
     if not lines: return None
     title, code, min_qty, unit_price, doz_price = "", "", 3, 0.0, 0.0
     
+    code_match = re.search(r'(?:كود|الكود|موديل|Model|model)\s*[:\-]?\s*([A-Za-z0-9\-_]+)', text, flags=re.IGNORECASE)
+    if code_match:
+        code = f" (كود {code_match.group(1)})"
+
     for l in lines:
         cl = clean_str(l)
-        if "كود" in cl:
-            d = re.findall(r'\d+', l)
-            if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون", "ماركه", "ماركة"]):
-            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن|ماركه|ماركة)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
+        if any(k in cl.lower() for k in ["ماركه", "ماركة", "aisha", "اسم الموديل", "الموديل", "موديل", "كلون", "كولون", "ليجن", "كارينا", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "شيفون", "اطفال"]):
+            if not title: 
+                title = re.sub(r'^[\#\s]*(ماركه|ماركة|اسم الموديل|الموديل|كوليكشن|موديل)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
+                break
     if not title: title = lines[0]
     title += code
     
@@ -67,6 +70,15 @@ def parse_post_text(text):
             if d:
                 unit_price = float(d[0])
                 break
+
+    if unit_price == 0:
+        for l in lines:
+            cl = clean_str(l)
+            if "السعر" in cl or "سعر" in cl or "جنيه" in cl or "ج" in cl:
+                d = re.findall(r'\d+(?:\.\d+)?', cl)
+                if d and float(d[0]) != doz_price:
+                    unit_price = float(d[0])
+                    break
                 
     if doz_price > 0 and unit_price == 0:
         unit_price = round(doz_price / 12, 2)
@@ -178,9 +190,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
-        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
+        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt} صنف</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]
         ]),
         parse_mode=ParseMode.HTML
@@ -212,10 +224,12 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "photo_id": p.get("photo_id")
     })
     save_data(CARTS_FILE, user_carts)
+    
+    cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ]),
         parse_mode=ParseMode.HTML
@@ -258,10 +272,12 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
+        
+        cnt = len(user_carts[uid])
         await update.message.reply_text(
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ]),
             parse_mode=ParseMode.HTML
@@ -418,8 +434,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    print("البوت يعمل الآن بكفاءة...")
-    app.run_polling(drop_pending_updates=True)
-    
+    app.add_handler(MessageHandler(filters.ChatTy
