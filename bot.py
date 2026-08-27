@@ -42,8 +42,8 @@ def parse_post_text(text):
         if "كود" in cl:
             d = re.findall(r'\d+', l)
             if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون", "ماركه", "ماركة", "موديل"]):
-            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن|ماركه|ماركة|موديل)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
+        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون", "ماركه", "ماركة"]):
+            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن|ماركه|ماركة)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
     if not title: title = lines[0]
     title += code
     
@@ -67,15 +67,6 @@ def parse_post_text(text):
             if d:
                 unit_price = float(d[0])
                 break
-
-    if unit_price == 0:
-        for l in lines:
-            cl = clean_str(l)
-            if "السعر" in cl or "سعر" in cl or "جنيه" in cl or "ج" in cl:
-                d = re.findall(r'\d+(?:\.\d+)?', cl)
-                if d and float(d[0]) != doz_price:
-                    unit_price = float(d[0])
-                    break
                 
     if doz_price > 0 and unit_price == 0:
         unit_price = round(doz_price / 12, 2)
@@ -187,9 +178,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
-        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt} صنف</b>",
+        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]
         ]),
         parse_mode=ParseMode.HTML
@@ -221,12 +212,10 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "photo_id": p.get("photo_id")
     })
     save_data(CARTS_FILE, user_carts)
-    
-    cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ]),
         parse_mode=ParseMode.HTML
@@ -269,12 +258,10 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
-        
-        cnt = len(user_carts[uid])
         await update.message.reply_text(
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ]),
             parse_mode=ParseMode.HTML
@@ -361,7 +348,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for mid in sent_delete_messages[uid]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
             except: pass
-    sent_delete_messages[uid] = []
+        sent_delete_messages[uid] = []
 
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
@@ -434,4 +421,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
-   
+    app.run_polling(drop_pending_updates=True)
+        
