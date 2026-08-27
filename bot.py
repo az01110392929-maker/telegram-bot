@@ -2,6 +2,7 @@ import logging, re, urllib.parse, sqlite3, os, html, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.error import Conflict, NetworkError
 
 BOT_TOKEN = "8626819929:AAFebq03VxiW6cU_-a_3_Rpy8_-hYr0VhQQ"
 BOT_USERNAME = "Mahmoud_mohammed_bot"
@@ -467,4 +468,4 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     uid = str(update.effective_user.id)
     db_clear_cart(uid)
     
-    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton(
+    kb_em
