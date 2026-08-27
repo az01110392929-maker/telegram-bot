@@ -1,4 +1,4 @@
-import logging, re, urllib.parse, json, os, html
+import logging, re, urllib.parse, json, os, html, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -32,6 +32,7 @@ user_carts = load_data(CARTS_FILE)
 bot_config = load_data(CONFIG_FILE)
 user_last_channel = load_data(CHANNELS_FILE)
 user_state = {}
+user_last_action_time = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -163,9 +164,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     uid = str(update.effective_user.id)
     args = context.args
+    now = time.time()
+    
     if uid not in user_carts: user_carts[uid] = []
 
+    # إذا كان الأمر يحتوي على كود الموديل
     if args and len(args) > 0 and args[0].startswith("buy_"):
+        user_last_action_time[uid] = now
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         if p:
@@ -182,6 +187,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
+
+    # تجاهل أمر start العادي إذا وصل مباشرة بالتزامن مع فتح موديل
+    if now - user_last_action_time.get(uid, 0) < 2.0:
+        return
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
