@@ -309,7 +309,7 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
         [InlineKeyboardButton(del_btn_text, callback_data="manage_items_after" if is_after_delete else "manage_items")],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
-    await bot.send_message(chat_id=chat_id, text=summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    await bot.send_message(chat_id=chat_id, text=summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -331,7 +331,6 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
         lines_wa.append(f"*{i}. {it['title']}*\n📦 الكمية: {it['label']}{pi}{ti}\n🔗 رابط الموديل: {it['link']}")
-        tot_sum += it['total']
         
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
     tot_txt_wa = f"\n\n💰 *إجمالي الفاتورة الكلي:* {tot_val} ج.م" if tot_sum > 0 else ""
