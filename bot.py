@@ -148,6 +148,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         except: pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     uid, args = str(update.effective_user.id), context.args
     if uid not in user_carts: user_carts[uid] = []
     
@@ -230,6 +231,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})\n• مثل 9 أو 10 أو 11 وهكذا العدد الي تحتاجه", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     uid = str(update.effective_user.id)
     state = user_state.get(uid)
     if state and state.get("action") == "waiting_custom_qty":
@@ -420,5 +422,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
-    app.run_polling()
-    
+    app.run_polling(drop_pending_updates=True)
+        
