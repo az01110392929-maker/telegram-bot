@@ -41,7 +41,7 @@ def parse_post_text(text):
         if "كود" in cl:
             d = re.findall(r'\d+', l)
             if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت"]):
+        if any(k in cl for k in ["اسم الموديل", "الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت"]):
             if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
     if not title: title = lines[0]
     title += code
@@ -61,12 +61,16 @@ def parse_post_text(text):
                 
     for l in lines:
         cl = clean_str(l)
-        if "القطعه" in cl or "سعر القطعه" in cl:
+        if "السعر" in cl or "سعر" in cl or "ج" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d:
-                unit_price = float(d[0])
+                val = float(d[0])
+                if val > 30: # غالباً هذا سعر الجملة للموديل إذا كان كبيراً
+                    if doz_price == 0: doz_price = val
+                else:
+                    if unit_price == 0: unit_price = val
                 break
-                
+
     if doz_price > 0 and unit_price == 0:
         unit_price = round(doz_price / 12, 2)
     elif unit_price > 0 and doz_price == 0:
@@ -176,9 +180,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
-        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
+        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt} صنف</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]
         ]),
         parse_mode=ParseMode.HTML
@@ -213,7 +217,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     await query.message.reply_text(
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {len(user_carts[uid])} صنف )", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ]),
         parse_mode=ParseMode.HTML
@@ -259,7 +263,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {len(user_carts[uid])} صنف )", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ]),
             parse_mode=ParseMode.HTML
