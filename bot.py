@@ -21,7 +21,7 @@ logging.basicConfig(
 # === إعدادات البوت والواتساب والقناة ===
 BOT_TOKEN = "8834711844:AAHw1VIyzUaU_kQbmm5hsCEmL-XXGuCp59A"
 WHATSAPP_NUMBER = "201000744741"
-CHANNEL_USERNAME = "portsaid_clothing" # ضع يوزر قناتك هنا بدون @ إذا أردت تعديله
+CHANNEL_URL = "https://t.me/portsaid_clothing"
 
 # === الأقسام الافتراضية ===
 CATEGORIES = {
@@ -83,19 +83,19 @@ def parse_post_text(text: str):
 def get_quantity_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("1 دسته (12 ق) 📦", callback_data="qty_1.0"),
-            InlineKeyboardButton("2 دسته (24 ق) 📦", callback_data="qty_2.0"),
+            InlineKeyboardButton("📦 1 دسته (12 ق)", callback_data="qty_1.0"),
+            InlineKeyboardButton("📦 2 دسته (24 ق)", callback_data="qty_2.0"),
         ],
         [
-            InlineKeyboardButton("3 دسته (36 ق) 📦", callback_data="qty_3.0"),
-            InlineKeyboardButton("4 دسته (48 ق) 📦", callback_data="qty_4.0"),
+            InlineKeyboardButton("📦 3 دسته (36 ق)", callback_data="qty_3.0"),
+            InlineKeyboardButton("📦 4 دسته (48 ق)", callback_data="qty_4.0"),
         ],
         [
-            InlineKeyboardButton("5 دسته (60 ق) 📦", callback_data="qty_5.0"),
-            InlineKeyboardButton("6 دسته (72 ق) 📦", callback_data="qty_6.0"),
+            InlineKeyboardButton("📦 5 دسته (60 ق)", callback_data="qty_5.0"),
+            InlineKeyboardButton("📦 6 دسته (72 ق)", callback_data="qty_6.0"),
         ],
         [
-            InlineKeyboardButton("10 دسته (120 ق) 📦", callback_data="qty_10.0"),
+            InlineKeyboardButton("📦 10 دسته (120 ق)", callback_data="qty_10.0"),
         ],
         [InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data="custom_qty")],
         [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="show_catalog")]
@@ -119,7 +119,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     items_count = len(cart["items"])
-    cart_btn_text = f"عرض الفاتورة ({items_count} صنف) 🛒" if items_count > 0 else "عرض الفاتورة الحالية 🛒"
+    btn_name = f"🛒 الفاتورة: {items_count} صنف" if items_count > 0 else "🛒 عرض الفاتورة"
 
     welcome_text = (
         "مرحباً بك في متجر الجملة للملابس - شركة بورسعيد 🛍️✨\n\n"
@@ -128,7 +128,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("👗 عرض الموديلات والأقسام", callback_data="show_catalog")],
-        [InlineKeyboardButton(cart_btn_text, callback_data="show_cart")],
+        [InlineKeyboardButton(btn_name, callback_data="show_cart")],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -208,9 +208,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         items_count = len(cart["items"])
         text = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
+        
+        # كتابة النص بدون أقواس متعارضة لضمان ظهور الكلمة بشكل سليم 100%
+        btn_cart_title = f"🛒 الفاتورة: {items_count} صنف"
+        
         keyboard = [
-            [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
-            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")]
+            [InlineKeyboardButton(btn_cart_title, callback_data="show_cart")],
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=CHANNEL_URL)]
         ]
         await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
@@ -260,7 +264,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("📲 إرسال الطلب عبر الواتساب", url=wa_url)],
-            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=CHANNEL_URL)],
             [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
         ]
         await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -303,9 +307,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             items_count = len(cart["items"])
             msg = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
+            
+            btn_cart_title = f"🛒 الفاتورة: {items_count} صنف"
+            
             keyboard = [
-                [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
-                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")]
+                [InlineKeyboardButton(btn_cart_title, callback_data="show_cart")],
+                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=CHANNEL_URL)]
             ]
             await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
         except ValueError:
