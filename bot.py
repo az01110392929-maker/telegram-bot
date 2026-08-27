@@ -14,9 +14,12 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 
 def load_data(p):
     return json.load(open(p, "r", encoding="utf-8")) if os.path.exists(p) else {}
+
 def save_data(p, d):
-    try: json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    except: pass
+    try:
+        json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    except:
+        pass
 
 products_db = load_data(DB_FILE)
 user_carts = load_data(CARTS_FILE)
@@ -156,10 +159,13 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             data["channel_base"] = f"https://t.me/c/{cid}"
         products_db[pid] = data
         save_data(DB_FILE, products_db)
-        try: await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
-        except: pass
+        try:
+            await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
+        except Exception as e:
+            logging.error(f"Edit error: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     uid, args = str(update.effective_user.id), context.args
     if uid not in user_carts: user_carts[uid] = []
     
@@ -331,12 +337,12 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
-        lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
+        lines_wa.append(f"*{i}. {it['title']}*\n📦 الكمية: {it['label']}{pi}{ti}\n🔗 رابط الموديل: {it['link']}")
         tot_sum += it['total']
         
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
-    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_val} ج.م" if tot_sum > 0 else ""
-    wa_msg = f"مرحباً متجر الجملة، أود تأكيد طلب الجملة التالي:\n\n" + "\n\n".join(lines_wa) + tot_txt_wa
+    tot_txt_wa = f"\n\n💰 *إجمالي الفاتورة الكلي:* {tot_val} ج.م" if tot_sum > 0 else ""
+    wa_msg = f"🛍️ *طلب جملة جديد من القناة:*\n------------------------------------\n\n" + "\n\n".join(lines_wa) + tot_txt_wa + "\n\n------------------------------------\nيرجى تأكيد الحجز وتجهيز الأوردر."
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
@@ -431,7 +437,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^(manage_items|manage_items_after)$"))
-    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatTy
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern
