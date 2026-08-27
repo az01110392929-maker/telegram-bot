@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 
 # === إعدادات البوت والواتساب والقناة ===
-BOT_TOKEN = "8834711844:AAHw1VIyzUaU_kQbmm5hsCEmL-XXGuCp59A"
+BOT_TOKEN = "8834711844:AAHhTJods1gDRAtE-pOzZPJmgFMuDeJJHpQ"
 WHATSAPP_NUMBER = "201000744741"
 CHANNEL_URL = "https://t.me/portsaid_clothing"
 
@@ -209,7 +209,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items_count = len(cart["items"])
         text = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
         
-        # كتابة النص بدون أقواس متعارضة لضمان ظهور الكلمة بشكل سليم 100%
         btn_cart_title = f"🛒 الفاتورة: {items_count} صنف"
         
         keyboard = [
