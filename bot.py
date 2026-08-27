@@ -1,4 +1,4 @@
-import logging, re, urllib.parse, sqlite3, os, html
+import logging, re, urllib.parse, sqlite3, os, html, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -176,7 +176,7 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
         
-    return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
+    return {"title": title[:50], "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
 def calculate_item_total(p, qty):
     if p.get('doz_price', 0) > 0:
@@ -467,4 +467,4 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     uid = str(update.effective_user.id)
     db_clear_cart(uid)
     
-    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع لل
+    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton(
