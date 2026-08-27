@@ -16,20 +16,15 @@ CHANNELS_FILE = "user_channels.json"
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 def load_data(p):
-    if not os.path.exists(p):
-        return {}
+    if not os.path.exists(p): return {}
     try:
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        with open(p, "r", encoding="utf-8") as f: return json.load(f)
+    except Exception: return {}
 
 def save_data(p, d):
     try:
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        with open(p, "w", encoding="utf-8") as f: json.dump(d, f, ensure_ascii=False, indent=2)
+    except Exception: pass
 
 user_state = {}
 sent_delete_messages = {}
@@ -106,34 +101,30 @@ def get_quantity_label(qty):
         21: "دستتين إلا ربع (21 قطعة)",
         24: "2 دسته (24 قطعة)"
     }
-    if qty in labels:
-        return labels[qty]
-    doz = qty // 12
-    rem = qty % 12
-    if rem == 0:
-        return f"{doz} دسته ({qty} قطعة)"
-    elif rem == 3:
-        return f"{doz} دسته وربع ({qty} قطعة)"
-    elif rem == 6:
-        return f"{doz} دسته ونصف ({qty} قطعة)"
-    elif rem == 9:
-        return f"{doz + 1} دسته إلا ربع ({qty} قطعة)"
+    if qty in labels: return labels[qty]
+    doz, rem = qty // 12, qty % 12
+    if rem == 0: return f"{doz} دسته ({qty} قطعة)"
+    elif rem == 3: return f"{doz} دسته وربع ({qty} قطعة)"
+    elif rem == 6: return f"{doz} دسته ونصف ({qty} قطعة)"
+    elif rem == 9: return f"{doz + 1} دسته إلا ربع ({qty} قطعة)"
     return f"{qty} قطعة"
 
 def generate_quantity_keyboard(post_id, min_qty):
     kb = []
     if min_qty >= 12:
-        q_list = [(12,"1 دسته"),(24,"2 دسته"),(36,"3 دسته"),(48,"4 دسته"),(60,"5 دسته"),(72,"6 دسته"),(120,"10 دسته")]
+        q_list = [(12, "1 دسته"), (24, "2 دسته"), (36, "3 دسته"), (48, "4 دسته"), (60, "5 دسته"), (72, "6 دسته"), (120, "10 دسته")]
     elif min_qty == 6:
-        q_list = [(6,"نص دسته"),(12,"1 دسته"),(18,"دسته ونص"),(24,"2 دسته"),(36,"3 دسته"),(48,"4 دسته"),(60,"5 دسته"),(72,"6 دسته")]
+        q_list = [(6, "نص دسته"), (12, "1 دسته"), (18, "دسته ونص"), (24, "2 دسته"), (36, "3 دسته"), (48, "4 دسته"), (60, "5 دسته"), (72, "6 دسته")]
     else:
-        q_list = [(3,"ربع دسته"),(6,"نص دسته"),(9,"دسته إلا ربع"),(12,"1 دسته"),(15,"دسته وربع"),(18,"دسته ونص"),(24,"2 دسته"),(36,"3 دسته"),(48,"4 دسته"),(60,"5 دسته")]
+        q_list = [(3, "ربع دسته"), (6, "نص دسته"), (9, "دسته إلا ربع"), (12, "1 دسته"), (15, "دسته وربع"), (18, "دسته ونص"), (24, "2 دسته"), (36, "3 دسته"), (48, "4 دسته"), (60, "5 دسته")]
         
     row = []
     for q, n in q_list:
         if q >= min_qty:
             row.append(InlineKeyboardButton(f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
-            if len(row) == 2: kb.append(row); row = []
+            if len(row) == 2:
+                kb.append(row)
+                row = []
     if row: kb.append(row)
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
     return InlineKeyboardMarkup(kb)
@@ -159,9 +150,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_data(DB_FILE, products_db)
         try:
             await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
-        except Exception:
-            pass
-
+        except Exception: pass
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     uid, args = str(update.effective_user.id), context.args
@@ -188,8 +177,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_data(CHANNELS_FILE, user_last_channel)
 
             pt = f"{p['price']} ج.م للقطعة" if p.get('price', 0) > 0 else "حسب المنشور"
-            doz_str = f" | سعر الدستة: {p['doz_price']} ج.م" if p.get('doz_price', 0) > 0 else ""
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}{doz_str}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
             kb = generate_quantity_keyboard(pid, p['min_qty'])
             if p.get("photo_id"):
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -199,9 +187,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
-        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt} صنف</b>",
+        f"مرحباً بك في <b>متجر الجملة</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]
         ]),
         parse_mode=ParseMode.HTML
@@ -238,12 +226,10 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         "photo_id": p.get("photo_id")
     })
     save_data(CARTS_FILE, user_carts)
-    
-    cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ]),
         parse_mode=ParseMode.HTML
@@ -253,7 +239,6 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid, pid = str(update.effective_user.id), query.data.replace("custom_", "")
-    
     products_db = load_data(DB_FILE)
     p = products_db.get(pid)
     if not p: return
@@ -268,7 +253,9 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         txt = clean_str(update.message.text.strip())
         p = state["product"]
         d = re.findall(r'\d+', txt)
-        if not d: await update.message.reply_text("⚠️ أدخل رقماً صحيحاً."); return
+        if not d:
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
+            return
         qty = int(d[0]) * 12
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
@@ -292,12 +279,10 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
-        
-        cnt = len(user_carts[uid])
         await update.message.reply_text(
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"🛒 عرض الفاتورة ( {cnt} صنف )", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ]),
             parse_mode=ParseMode.HTML
@@ -456,4 +441,13 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
-    app.add_handler(Callb
+    app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^(manage_items|manage_items_after)$"))
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
+    print("البوت يعمل الآن بنجاح...")
+    app.run_polling(drop_pending_updates=True)
+        
