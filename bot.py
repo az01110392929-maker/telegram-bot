@@ -12,7 +12,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# === إعدادات البوت والواتساب ===
+# === إعدادات البوت الأصلي والواتساب ===
 BOT_TOKEN = "8626819929:AAG3Q_0oxkgIZP_IYnmL4jK9L0M1N2P3Q"
 WHATSAPP_NUMBER = "201000744741"
 
@@ -313,7 +313,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("عفواً، يرجى كتابة الرقم بالأرقام فقط (مثال: 7 أو 10).")
 
-# === تشغيل البوت وإعدادات الاتصال ===
+# === تشغيل البوت وإعدادات الاتصال الثابتة ===
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -324,3 +324,4 @@ if __name__ == "__main__":
 
     print("...البوت يعمل الآن بكفاءة وثبات")
     app.run_polling(drop_pending_updates=True)
+        
