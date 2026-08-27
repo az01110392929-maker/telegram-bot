@@ -18,9 +18,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# === إعدادات البوت والواتساب ===
+# === إعدادات البوت والواتساب والقناة ===
 BOT_TOKEN = "8834711844:AAHw1VIyzUaU_kQbmm5hsCEmL-XXGuCp59A"
 WHATSAPP_NUMBER = "201000744741"
+CHANNEL_USERNAME = "portsaid_clothing" # ضع يوزر قناتك هنا بدون @ إذا أردت تعديله
 
 # === الأقسام الافتراضية ===
 CATEGORIES = {
@@ -209,8 +210,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
         keyboard = [
             [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
-            [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
-            [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")]
         ]
         await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
@@ -260,9 +260,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("📲 إرسال الطلب عبر الواتساب", url=wa_url)],
-            [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
-            [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")],
-            [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
         ]
         await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
@@ -306,8 +305,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = f"✅ تمت إضافة *{int(qty_val) if qty_val.is_integer() else qty_val} دسته* ({pieces} قطعة) بنجاح!"
             keyboard = [
                 [InlineKeyboardButton(f"عرض الفاتورة ({items_count} صنف) 🛒", callback_data="show_cart")],
-                [InlineKeyboardButton("➕ إضافة موديل آخر", callback_data="show_catalog")],
-                [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu")]
+                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=f"https://t.me/{CHANNEL_USERNAME}")]
             ]
             await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
         except ValueError:
@@ -334,4 +332,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
