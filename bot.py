@@ -38,7 +38,7 @@ def parse_post_text(text):
         if "كود" in cl:
             d = re.findall(r'\d+', l)
             if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت"]):
+        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون"]):
             if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
     if not title: title = lines[0]
     title += code
@@ -84,23 +84,26 @@ def get_quantity_label(qty):
     doz = qty // 12
     rem = qty % 12
     if rem == 0:
-        return f"{doz} دسته ({qty} قطعة)"
+        return f"{doz} دستة ({qty} قطعة)"
     elif rem == 3:
-        return f"{doz} دسته وربع ({qty} قطعة)"
+        return f"{doz} دستة وربع ({qty} قطعة)"
     elif rem == 6:
-        return f"{doz} دسته ونصف ({qty} قطعة)"
+        return f"{doz} دستة ونصف ({qty} قطعة)"
     elif rem == 9:
-        return f"{doz + 1} دسته إلا ربع ({qty} قطعة)"
+        return f"{doz + 1} دستة إلا ربع ({qty} قطعة)"
     return f"{qty} قطعة"
 
 def generate_quantity_keyboard(post_id, min_qty):
     kb = []
-    if min_qty >= 12:
-        q_list = [(12,"1 دسته"),(24,"2 دسته"),(36,"3 دسته"),(48,"4 دسته"),(60,"5 دسته")]
-    elif min_qty == 6:
-        q_list = [(6,"نص دسته"),(12,"1 دسته"),(18,"دسته ونص"),(24,"2 دسته"),(36,"3 دسته")]
-    else:
-        q_list = [(3,"ربع دسته"),(6,"نص دسته"),(9,"دسته إلا ربع"),(12,"1 دسته"),(15,"دسته وربع"),(18,"دسته ونص"),(24,"2 دسته")]
+    # عرض 6 خيارات مرتبة (من 1 دستة إلى 6 دستات)
+    q_list = [
+        (12, "1 دستة"),
+        (24, "2 دستة"),
+        (36, "3 دستة"),
+        (48, "4 دستة"),
+        (60, "5 دستة"),
+        (72, "6 دستة")
+    ]
         
     row = []
     for q, n in q_list:
@@ -197,7 +200,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
-    await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})", parse_mode=ParseMode.HTML)
+    await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 6 دسته أو 6 دستة", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -205,9 +208,15 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     if state and state.get("action") == "waiting_custom_qty":
         txt = clean_str(update.message.text.strip())
         p = state["product"]
+        
+        # استخراج الأرقام سواء كانت عربية (بعد التحويل) أو إنجليزية
         d = re.findall(r'\d+', txt)
-        if not d: await update.message.reply_text("⚠️ أدخل رقماً صحيحاً."); return
-        qty = int(d[0]) * 12
+        if not d: 
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً (مثل: 6 أو 6 دسته).")
+            return
+            
+        doz_count = int(d[0])
+        qty = doz_count * 12
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
@@ -311,7 +320,6 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         save_data(CARTS_FILE, user_carts)
         await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
     
-    # الرجوع تلقائياً إلى الفاتورة مع إظهار زر حذف صنف آخر
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
 async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
