@@ -159,7 +159,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_carts[uid].append({"title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link})
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
-        await query_msg = await update.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!\nالإجمالي: {tot} ج.م",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")],
