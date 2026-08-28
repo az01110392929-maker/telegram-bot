@@ -89,7 +89,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"مرحباً بك في <b>شركة بورسعيد لاستيراد وتصدير الملابس</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
@@ -127,10 +127,11 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id")
     })
     save_data(CARTS_FILE, user_carts)
+    cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة {label} بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")],
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ])
     )
@@ -164,10 +165,11 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
+        cnt = len(user_carts[uid])
         await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")],
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
             ])
         )
