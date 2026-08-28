@@ -153,9 +153,7 @@ def generate_quantity_keyboard(post_id, min_qty):
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
     return InlineKeyboardMarkup(kb)
 
-async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    post = update.channel_post
-    if not post: return
+async def process_post(post):
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
@@ -170,8 +168,18 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             data["channel_base"] = f"https://t.me/c/{cid}"
         products_db[pid] = data
         save_data(DB_FILE, products_db)
-        try: await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
-        except: pass
+        try:
+            await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
+        except Exception as e:
+            logging.info(f"Could not edit markup for post {pid}: {e}")
+
+async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.channel_post:
+        await process_post(update.channel_post)
+
+async def handle_edited_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.edited_channel_post:
+        await process_post(update.edited_channel_post)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, args = str(update.effective_user.id), context.args
@@ -409,7 +417,9 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # زيادة سرعة المعالجة واستيعاب الدفعات الكبيرة (Concurrency)
+    app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
@@ -418,8 +428,11 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.UpdateType.CHANNEL_POST, handle_channel_post))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.UpdateType.EDITED_CHANNEL_POST, handle_edited_channel_post))
+    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
     app.run_polling(drop_pending_updates=True)
-    
+                    
