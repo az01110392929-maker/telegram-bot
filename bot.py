@@ -173,7 +173,7 @@ def generate_quantity_keyboard(post_id, min_qty):
             row.append(InlineKeyboardButton(f"📦 {n} ({q} قطعه)" if q == 30 else f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
             if len(row) == 2: kb.append(row); row = []
     if row: kb.append(row)
-    kb.append([InlineKeyboardButton(" كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
+    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
     return InlineKeyboardMarkup(kb)
 
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,14 +194,15 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         products_db[pid] = data
         save_data(DB_FILE, products_db)
         try:
-            await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
+            await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
         except Exception as e:
             logging.info(f"Could not edit markup for post {pid}: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid, args = str(update.effective_user.id), context.args
+    uid = str(update.effective_user.id)
     if uid not in user_carts: user_carts[uid] = []
     
+    args = context.args
     if args and len(args) > 0 and args[0].startswith("buy_"):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
@@ -212,20 +213,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_data(CHANNELS_FILE, user_last_channel)
 
             pt = f"{p['price']} ج.م للقطعة" if p.get('price', 0) > 0 else "حسب المنشور"
-            msg = f"<b>الموديل:</b> {html.escape(p['title'])}\n<b>السعر:</b> {pt}\n<b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n<b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n💵 <b>السعر:</b> {pt}\n📦 <b>الحد الأدنى للطلب:</b> {p['min_qty']} قطع\n\n👇 <b>اختر الكمية المطلوبة:</b>"
             kb = generate_quantity_keyboard(pid, p['min_qty'])
             if p.get("photo_id"):
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else:
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
+        else:
+            await update.message.reply_text("⚠️ عذراً، لم يتم العثور على بيانات هذا الموديل، قد يكون قديمأً أو تم حذفه.")
+            return
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
-        f"مرحباً بك في <b>شركة بورسعيد لاستيراد وتصدير الملابس</b>\nالأصناف في فاتورتك: <b>{cnt}</b>",
+        f"مرحباً بك في <b>شركة بورسعيد لاستيراد وتصدير الملابس</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"عرض الفاتورة ({cnt})", callback_data="view_cart")],
-            [InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
     )
@@ -249,10 +253,10 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     })
     save_data(CARTS_FILE, user_carts)
     await query.message.reply_text(
-        f"تمت إضافة <b>{lbl}</b> بنجاح!",
+        f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
-            [InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
+            [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
     )
@@ -264,7 +268,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
-    await query.message.reply_text(f"اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2.5 أو 2 دستة ونص", parse_mode=ParseMode.HTML)
+    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2.5 أو 2 دستة ونص", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -275,7 +279,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         
         d = re.findall(r'\d+(?:\.\d+)?', txt)
         if not d: 
-            await update.message.reply_text("ادخل رقماً صحيحاً.")
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
             
         val = float(d[0])
@@ -306,10 +310,10 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
         await update.message.reply_text(
-            f"تمت إضافة <b>{lbl}</b> بنجاح!",
+            f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("عرض الفاتورة", callback_data="view_cart")],
-                [InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
+                [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
+                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
             ]),
             parse_mode=ParseMode.HTML
         )
@@ -317,8 +321,8 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     cart = user_carts.get(uid, [])
     if not cart:
-        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
-        await bot.send_message(chat_id=chat_id, text="<b>الفاتورة فارغة الآن.</b>", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
+        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
+        await bot.send_message(chat_id=chat_id, text="🛒 <b>الفاتورة فارغة الآن.</b>", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
         return
         
     lines = []
@@ -326,20 +330,20 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
-        lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\nالكمية: <b>{it['label']}</b>{pi}{ti}\n<a href='{it['link']}'>رابط الموديل</a>")
+        lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>{pi}{ti}\n🖼️ <a href='{it['link']}'>رابط الموديل</a>")
         
     tot_sum = sum(it['total'] for it in cart)
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
-    tot_txt_html = f"\n\n<b>إجمالي الفاتورة الكلي:</b> {tot_val} ج.م" if tot_sum > 0 else ""
-    summary = f"<b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join(lines) + tot_txt_html
+    tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_val} ج.م" if tot_sum > 0 else ""
+    summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join(lines) + tot_txt_html
     
-    del_btn_text = "حذف صنف آخر" if is_after_delete else "حذف صنف"
+    del_btn_text = "❌ حذف صنف آخر" if is_after_delete else "❌ حذف صنف"
     
     keyboard = [
-        [InlineKeyboardButton("إرسال الفاتورة عبر واتساب", callback_data="send_wa")],
-        [InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=last_link)],
+        [InlineKeyboardButton("📲 إرسال الفاتورة عبر واتساب", callback_data="send_wa")],
+        [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=last_link)],
         [InlineKeyboardButton(del_btn_text, callback_data="manage_items")],
-        [InlineKeyboardButton("تفريغ الفاتورة", callback_data="clear_cart")]
+        [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
     await bot.send_message(chat_id=chat_id, text=summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
@@ -355,7 +359,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     cart = user_carts.get(uid, [])
     if not cart:
-        await query.message.reply_text("الفاتورة فارغة.")
+        await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
     if uid in sent_delete_messages:
@@ -364,14 +368,15 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
     sent_delete_messages[uid] = []
 
-    m_head = await query.message.reply_text("<b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
+    m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
     
     for idx, it in enumerate(cart, 1):
+        p_price = it.get('price', 0)
         p_total = it.get('total', 0)
-        price_line = f"\nالإجمالي: {p_total} ج.م" if p_total > 0 else ""
-        cap = f"<b>صنف ({idx}):</b> {html.escape(it['title'])}\nالكمية: {it['label']}{price_line}"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"حذف هذا الصنف (رقم {idx})", callback_data=f"del_{idx-1}")]])
+        price_line = f"\n💰 الإجمالي: {p_total} ج.م" if p_total > 0 else ""
+        cap = f"❌ <b>صنف ({idx}):</b> {html.escape(it['title'])}\n📦 الكمية: {it['label']}{price_line}"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"❌ حذف هذا الصنف (رقم {idx})", callback_data=f"del_{idx-1}")]])
         
         if it.get("photo_id"):
             m_item = await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -394,7 +399,7 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if 0 <= idx < len(user_carts[uid]):
         rem = user_carts[uid].pop(idx)
         save_data(CARTS_FILE, user_carts)
-        await query.message.reply_text(f"تم حذف ({rem['title']}) بنجاح!")
+        await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
     
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
@@ -404,18 +409,18 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     cart = user_carts.get(uid, [])
     if not cart:
-        await query.message.reply_text("الفاتورة فارغة بالفعل.")
+        await query.message.reply_text("🛒 الفاتورة فارغة بالفعل.")
         return
         
     lines_wa, tot_sum = [], 0
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
-        lines_wa.append(f"{i}. {it['title']}\nالكمية: {it['label']}{pi}{ti}\nرابط: {it['link']}")
+        lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
         tot_sum += it['total']
         
     tot_val = int(tot_sum) if abs(tot_sum - round(tot_sum)) < 0.05 else round(tot_sum, 2)
-    tot_txt_wa = f"\n\nإجمالي الفاتورة الكلي: {tot_val} ج.م" if tot_sum > 0 else ""
+    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_val} ج.م" if tot_sum > 0 else ""
     wa_msg = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة التالي:\n\n" + "\n\n".join(lines_wa) + tot_txt_wa
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
@@ -423,9 +428,9 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("اضغط هنا لفتح الواتساب وإرسال الفاتورة الآن", url=wa_link)]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح الواتساب وإرسال الفاتورة الآن", url=wa_link)]])
     await query.message.reply_text(
-        "<b>تم تجهيز الفاتورة بنجاح!</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
+        "✅ <b>تم تجهيز الفاتورة بنجاح!</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
         reply_markup=kb,
         parse_mode=ParseMode.HTML
     )
@@ -436,8 +441,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     uid = str(update.effective_user.id)
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
-    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
-    await query.message.reply_text("تم تفريغ الفاتورة بنجاح", reply_markup=kb_empty)
+    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
+    await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
@@ -451,8 +456,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    print("Bot is running...")
-    app.run_polling(drop_pending_updates=True)
-        
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_po
