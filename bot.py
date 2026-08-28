@@ -327,8 +327,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             ]),
             parse_mode=ParseMode.HTML
         )
-
-async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
+        async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     cart = user_carts.get(uid, [])
     if not cart:
         kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
@@ -479,4 +478,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filt
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
+    
+    print("Bot is running...")
+    app.run_polling(drop_pending_updates=True)
+    
