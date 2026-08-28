@@ -62,41 +62,57 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
-    # تطبيق القاعدة الدقيقة حسب طلبك
-    min_qty = 3  # الافتراضي ربع دستة
-    
+    min_qty = 3
     if "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص دستة" in text_clean:
         min_qty = 6
     elif "ربع دسته" in text_clean or "ربع دستة" in text_clean:
         min_qty = 3
-    elif has_piece_price:
-        min_qty = 3  # إذا وجد سعر القطعة يبدأ من ربع دستة
+    elif has_piece_price or "ربع" in text_clean:
+        min_qty = 3
     elif doz_price > 0 and not has_piece_price:
-        min_qty = 12 # إذا وجد سعر الدستة فقط بدون سعر القطعة أقل حاجة دستة
+        min_qty = 12
 
     return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
 def generate_quantity_keyboard(pid, min_qty):
-    all_options = [
-        (3, "📦 ربع (3 ق)"),
-        (6, "📦 نص (6 ق)"),
-        (9, "📦 دستة إلا ربع (9 ق)"),
-        (12, "📦 دستة (12 ق)"),
-        (15, "📦 دستة وربع (15 ق)"),
-        (18, "📦 دستة ونص (18 ق)"),
-        (24, "📦 2 دستة (24 ق)"),
-        (36, "📦 3 دستة (36 ق)")
-    ]
+    if min_qty == 12:
+        all_options = [
+            (12, "📦 دستة (12 ق)"),
+            (24, "📦 2 دستة (24 ق)"),
+            (36, "📦 3 دستة (36 ق)"),
+            (48, "📦 4 دستة (48 ق)"),
+            (60, "📦 5 دستة (60 ق)"),
+            (72, "📦 6 دستة (72 ق)")
+        ]
+    elif min_qty == 6:
+        all_options = [
+            (6, "📦 نص (6 ق)"),
+            (12, "📦 دستة (12 ق)"),
+            (18, "📦 دستة ونص (18 ق)"),
+            (24, "📦 2 دستة (24 ق)"),
+            (30, "📦 2 دستة ونص (30 ق)"),
+            (36, "📦 3 دستة (36 ق)"),
+            (42, "📦 3 دستة ونص (42 ق)"),
+            (48, "📦 4 دستة (48 ق)")
+        ]
+    else:
+        all_options = [
+            (3, "📦 ربع (3 ق)"),
+            (6, "📦 نص (6 ق)"),
+            (9, "📦 دستة إلا ربع (9 ق)"),
+            (12, "📦 دستة (12 ق)"),
+            (15, "📦 دستة وربع (15 ق)"),
+            (18, "📦 دستة ونص (18 ق)"),
+            (24, "📦 2 دستة (24 ق)"),
+            (27, "📦 2 دستة وربع (27 ق)"),
+            (30, "📦 2 دستة ونص (30 ق)")
+        ]
     
-    valid_buttons = []
-    for q, label in all_options:
-        if q >= min_qty:
-            valid_buttons.append(InlineKeyboardButton(label, callback_data=f"add_{pid}_{q}"))
-            
+    valid_buttons = [InlineKeyboardButton(label, callback_data=f"add_{pid}_{q}") for q, label in all_options]
     kb = []
     for i in range(0, len(valid_buttons), 2):
         kb.append(valid_buttons[i:i+2])
-    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري", callback_data=f"custom_{pid}")])
+    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{pid}")])
     return InlineKeyboardMarkup(kb)
 
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -149,7 +165,13 @@ def get_qty_label(qty):
         15: "دستة وربع (15 قطعة)",
         18: "دستة ونصف (18 قطعة)",
         24: "2 دستة (24 قطعة)",
-        36: "3 دستة (36 قطعة)"
+        27: "2 دستة وربع (27 قطعة)",
+        30: "2 دستة ونصف (30 قطعة)",
+        36: "3 دستة (36 قطعة)",
+        42: "3.5 دستة (42 قطعة)",
+        48: "4 دستة (48 قطعة)",
+        60: "5 دستة (60 قطعة)",
+        72: "6 دستة (72 قطعة)"
     }
     if qty in labels: return labels[qty]
     doz = qty / 12
@@ -188,18 +210,29 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"product": p}
-    await query.message.reply_text("✍️ اكتب الكمية المطلوبة أرقاماً (مثل: 3 أو 4 أو 2.5):")
+    await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥):")
 
 async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     if uid in user_state:
         p = user_state[uid]["product"]
         txt = clean_str(update.message.text.strip())
-        try: doz = float(re.findall(r'\d+(?:\.\d+)?', txt)[0])
+        try: 
+            d = re.findall(r'\d+(?:\.\d+)?', txt)
+            if not d: raise ValueError()
+            doz = float(d[0])
         except: 
-            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً أو عشرياً (مثل: 4 أو 2.5).")
             return
-        qty = int(doz * 12)
+        
+        if "نص" in txt or "نصف" in txt:
+            if doz == int(doz): doz += 0.5
+        elif "ربع" in txt:
+            if doz == int(doz): doz += 0.25
+        elif "الا ربع" in txt or "إلا ربع" in txt:
+            if doz == int(doz): doz -= 0.25
+
+        qty = int(round(doz * 12))
         unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
         tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
         label = get_qty_label(qty)
