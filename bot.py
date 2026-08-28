@@ -273,15 +273,12 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         txt = clean_str(update.message.text.strip())
         p = state["product"]
         
-        # استخراج الأرقام وقراءة الكسور مثل (ونص / نصف / وربع)
         d = re.findall(r'\d+(?:\.\d+)?', txt)
         if not d: 
             await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
             
         val = float(d[0])
-        
-        # إذا كتب العميل رقم مع كلمة ونص أو نصف
         if "نص" in txt or "نصف" in txt:
             val += 0.5
         elif "ربع" in txt:
@@ -448,7 +445,7 @@ if __name__ == "__main__":
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
-    app.add_handler(CallbackType:=CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
+    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
@@ -456,4 +453,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
+    print("البوت يعمل الآن بكفاءة...
