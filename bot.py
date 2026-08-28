@@ -421,8 +421,6 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         rem = user_carts[uid].pop(idx)
         save_data(CARTS_FILE, user_carts)
         await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
-    else:
-        await query.message.reply_text("⚠️ عذراً، هذا الصنف غير موجود أو تم حذفه مسبقاً.")
     
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
@@ -480,4 +478,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filters.ChatType.CHA
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filt
