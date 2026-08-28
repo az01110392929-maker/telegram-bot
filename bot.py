@@ -70,9 +70,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p = products_db.get(pid)
         if p:
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📦 رربع دستة (3 ق)", callback_data=f"add_{pid}_3"), InlineKeyboardButton("📦 نص دستة (6 ق)", callback_data=f"add_{pid}_6")],
-                [InlineKeyboardButton("📦 1 دستة (12 ق)", callback_data=f"add_{pid}_12"), InlineKeyboardButton("📦 2 دستة (24 ق)", callback_data=f"add_{pid}_24")],
-                [InlineKeyboardButton("📦 2 دستة ونص (30 ق)", callback_data=f"add_{pid}_30")],
+                [InlineKeyboardButton("📦 ربع (3 ق)", callback_data=f"add_{pid}_3"), InlineKeyboardButton("📦 نص (6 ق)", callback_data=f"add_{pid}_6")],
+                [InlineKeyboardButton("📦 دستة إلا ربع (9 ق)", callback_data=f"add_{pid}_9"), InlineKeyboardButton("📦 دستة (12 ق)", callback_data=f"add_{pid}_12")],
+                [InlineKeyboardButton("📦 دستة وربع (15 ق)", callback_data=f"add_{pid}_15"), InlineKeyboardButton("📦 دستة ونص (18 ق)", callback_data=f"add_{pid}_18")],
+                [InlineKeyboardButton("📦 2 دستة (24 ق)", callback_data=f"add_{pid}_24"), InlineKeyboardButton("📦 3 دستة (36 ق)", callback_data=f"add_{pid}_36")],
                 [InlineKeyboardButton("✍️ كتابة كمية اخري", callback_data=f"custom_{pid}")]
             ])
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
@@ -83,6 +84,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"مرحباً بك في شركة بورسعيد 🛍️\nالأصناف في فاتورتك: {cnt}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"عرض الفاتورة ({cnt})", callback_data="view_cart")]]))
 
 def get_qty_label(qty):
+    labels = {
+        3: "ربع دستة (3 قطع)",
+        6: "نص دستة (6 قطع)",
+        9: "دستة إلا ربع (9 قطع)",
+        12: "1 دستة (12 قطعة)",
+        15: "دستة وربع (15 قطعة)",
+        18: "دستة ونصف (18 قطعة)",
+        24: "2 دستة (24 قطعة)",
+        36: "3 دستة (36 قطعة)"
+    }
+    if qty in labels:
+        return labels[qty]
     doz = qty / 12
     if doz.is_integer():
         return f"{int(doz)} دستة ({qty} قطعة)"
