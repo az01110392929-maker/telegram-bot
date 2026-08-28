@@ -399,8 +399,18 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    idx = int(query.data.replace("del_", ""))
     
+    # التأكد من وجود سلة للمستخدم وأن الفاتورة ليست فارغة
+    if uid not in user_carts or not user_carts[uid]:
+        await query.message.reply_text("🛒 الفاتورة فارغة.")
+        return
+
+    try:
+        idx = int(query.data.replace("del_", ""))
+    except:
+        idx = -1
+    
+    # حذف رسائل القائمة السابقة لتنظيف المحادثة
     if uid in sent_delete_messages:
         for mid in sent_delete_messages[uid]:
             try:
@@ -413,7 +423,10 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         rem = user_carts[uid].pop(idx)
         save_data(CARTS_FILE, user_carts)
         await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
+    else:
+        await query.message.reply_text("⚠️ عذراً، هذا الصنف غير موجود أو تم حذفه مسبقاً.")
     
+    # عرض الفاتورة المحدثة مع الحفاظ على الأصناف الباقية
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
 async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -467,12 +480,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
-    
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    
-    print("Bot is running...")
-    app.run_polling(drop_pending_updates=True)
-    
+    app.add_handler(CallbackQueryHandler(handle_quantity_sele
