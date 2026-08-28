@@ -28,47 +28,66 @@ def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
 def parse_post_text(text):
-    text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    text_clean = clean_str(text)
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     if not lines: return None
-    title, code, min_qty, unit_price, doz_price = "", "", 3, 0.0, 0.0
+    
+    title, code, unit_price, doz_price = "", "", 0.0, 0.0
     
     for l in lines:
         cl = clean_str(l)
         if "كود" in cl:
             d = re.findall(r'\d+', l)
             if d: code = f" (كود {d[0]})"
-        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون"]):
-            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
+        if any(k in cl for k in ["اسم الموديل", "برا", "اندر", "هاف", "شراب", "بجامه", "بيجامه", "بنطلون", "طقم", "عبايه", "كاش", "ترنج", "فستان", "شورت", "قميص", "كوليكشن", "سوكت", "كلون", "فوري", "إتش", "هوم", "ليجن", "كلوت"]):
+            if not title: title = re.sub(r'^[\#\s]*(اسم الموديل|الموديل|كوليكشن|فوري)\s*[:\-\=\👉\👈]*\s*', '', l, flags=re.IGNORECASE).strip()
     if not title: title = lines[0]
     title += code
     
-    fc = clean_str(text)
-    if "ربع دسته" in fc: min_qty = 3
-    elif "نص دسته" in fc or "نصف دسته" in fc: min_qty = 6
-    elif "دسته" in fc: min_qty = 12
-    
+    # قراءة دقيقة للأسعار تتجاهل الحروف والرموز الزخرفية مثل (ج) أو (ط) بجانب الرقم
     for l in lines:
         cl = clean_str(l)
-        if "سعر الدسته" in cl or "الدسته" in cl:
+        if "سعر الدسته" in cl or ("الدسته" in cl and "سعر" in cl) or "دستة" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
-            if d:
-                doz_price = float(d[0])
-                break
-                
-    for l in lines:
-        cl = clean_str(l)
-        if "القطعه" in cl or "سعر القطعه" in cl:
+            if d: doz_price = float(d[0])
+        elif "سعر القطعه" in cl or ("القطعه" in cl and "سعر" in cl) or "السعر" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
-            if d:
-                unit_price = float(d[0])
-                break
-                
+            if d and doz_price == 0:
+                # التأكد أن السطر لا يقصد سعر الدستة
+                if "دستة" not in cl and "دسته" not in cl:
+                    unit_price = float(d[0])
+
+    # فحص عام إذا وكلمة السعر مع رقم منفرد بدون تحديد قطعه أو دسته
+    if unit_price == 0 and doz_price == 0:
+        for l in lines:
+            cl = clean_str(l)
+            if "السعر" in cl or "سعر" in cl:
+                d = re.findall(r'\d+(?:\.\d+)?', cl)
+                if d:
+                    if "دستة" in cl or "دسته" in cl:
+                        doz_price = float(d[0])
+                    else:
+                        unit_price = float(d[0])
+
     if doz_price > 0 and unit_price == 0:
         unit_price = round(doz_price / 12, 2)
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
-        
+
+    # تحديد الحد الأدنى (Min Qty) بناءً على قواعدك
+    min_qty = 12
+    if "ربع دسته" in text_clean or "ربع" in text_clean:
+        min_qty = 3
+    elif "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص" in text_clean:
+        min_qty = 6
+    elif "اول دسته" in text_clean or "من اول" in text_clean:
+        min_qty = 12
+    else:
+        if unit_price > 0 and doz_price == 0:
+            min_qty = 3
+        elif doz_price > 0 and "ربع" not in text_clean and "نص" not in text_clean:
+            min_qty = 12
+
     return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
 def calculate_item_total(p, qty):
@@ -81,6 +100,18 @@ def calculate_item_total(p, qty):
     return 0
 
 def get_quantity_label(qty):
+    labels = {
+        3: "ربع دستة (3 قطع)",
+        6: "نص دستة (6 قطع)",
+        9: "دستة إلا ربع (9 قطع)",
+        12: "1 دستة (12 قطعة)",
+        15: "دستة وربع (15 قطعة)",
+        18: "دستة ونصف (18 قطعة)",
+        21: "دستتين إلا ربع (21 قطعة)",
+        24: "2 دستة (24 قطعة)"
+    }
+    if qty in labels:
+        return labels[qty]
     doz = qty // 12
     rem = qty % 12
     if rem == 0:
@@ -95,8 +126,10 @@ def get_quantity_label(qty):
 
 def generate_quantity_keyboard(post_id, min_qty):
     kb = []
-    # عرض 6 خيارات مرتبة (من 1 دستة إلى 6 دستات)
-    q_list = [
+    all_q = [
+        (3, "ربع دستة"),
+        (6, "نص دستة"),
+        (9, "دستة إلا ربع"),
         (12, "1 دستة"),
         (24, "2 دستة"),
         (36, "3 دستة"),
@@ -106,7 +139,7 @@ def generate_quantity_keyboard(post_id, min_qty):
     ]
         
     row = []
-    for q, n in q_list:
+    for q, n in all_q:
         if q >= min_qty:
             row.append(InlineKeyboardButton(f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
             if len(row) == 2: kb.append(row); row = []
@@ -200,7 +233,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
-    await query.message.reply_text(f"✍️ اكتب كمية الدست الي تحتاجه للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 6 دسته أو 6 دستة", parse_mode=ParseMode.HTML)
+    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2 دستة", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -209,14 +242,20 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         txt = clean_str(update.message.text.strip())
         p = state["product"]
         
-        # استخراج الأرقام سواء كانت عربية (بعد التحويل) أو إنجليزية
         d = re.findall(r'\d+', txt)
         if not d: 
-            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً (مثل: 6 أو 6 دسته).")
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
             
-        doz_count = int(d[0])
-        qty = doz_count * 12
+        val = int(d[0])
+        if val in [3, 6, 9] and "دست" not in txt and "دستة" not in txt and "دسته" not in txt:
+            qty = val
+        else:
+            if val <= 15 and ("دست" in txt or "دستة" in txt or "دسته" in txt or val < 10):
+                qty = val * 12
+            else:
+                qty = val
+                
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
@@ -377,4 +416,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
     app.run_polling(drop_pending_updates=True)
-    
+                
