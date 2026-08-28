@@ -266,18 +266,10 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
         )
         return
         
-    lines = []
-    last_link = cart[-1].get("link", DEFAULT_CHANNEL_LINK) if cart else DEFAULT_CHANNEL_LINK
     tot_sum = sum(it.get('total', 0) for it in cart)
+    last_link = cart[-1].get("link", DEFAULT_CHANNEL_LINK) if cart else DEFAULT_CHANNEL_LINK
     
-    for i, it in enumerate(cart, 1):
-        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
-        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        link_prefix = f"{it['link']}\n" if i == 1 else ""
-        lines.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
-        
-    tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else ""
-    summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + tot_txt_html
+    summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + (f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else "")
     
     del_btn_text = "❌ حذف صنف آخر" if is_after_delete else "❌ حذف صنف"
     
@@ -351,7 +343,9 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    cart = user_carts.get(uid, [])
+    
+    # 1. نسخ الأصناف أولاً قبل أي تفريغ لضمان عدم ضياع البيانات
+    cart = list(user_carts.get(uid, []))
     if not cart:
         await query.message.reply_text("🛒 الفاتورة فارغة بالفعل.")
         return
@@ -370,6 +364,7 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
+    # 2. تفريغ السلة بعد بناء الرابط بنجاح تام
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
