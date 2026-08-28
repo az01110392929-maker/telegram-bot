@@ -270,7 +270,14 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     last_link = cart[-1].get("link", DEFAULT_CHANNEL_LINK) if cart else DEFAULT_CHANNEL_LINK
     tot_sum = sum(it.get('total', 0) for it in cart)
     
-    summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + (f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else "")
+    for i, it in enumerate(cart, 1):
+        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
+        link_prefix = f"{it['link']}\n" if i == 1 else ""
+        lines.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
+        
+    tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else ""
+    summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + tot_txt_html
     
     del_btn_text = "❌ حذف صنف آخر" if is_after_delete else "❌ حذف صنف"
     
@@ -337,11 +344,6 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         save_data(CARTS_FILE, user_carts)
         rem_name = rem['title']
     
-    try:
-        await query.message.delete()
-    except:
-        pass
-
     await query.message.reply_text(f"🗑️ تم حذف ({rem_name}) بنجاح!")
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
