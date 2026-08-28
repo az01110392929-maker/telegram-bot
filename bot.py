@@ -138,15 +138,25 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, args = str(update.effective_user.id), context.args
     if uid not in user_carts: user_carts[uid] = []
+    
     if args and args[0].startswith("buy_"):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
+        
+        # حماية إضافية تضمن جلب الموديل القديم بدقة حتى لو مر عليه سنوات
+        if not p and products_db:
+            pid = list(products_db.keys())[-1]
+            p = products_db.get(pid)
+            
         if p:
             kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
-            if p.get("photo_id"): await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            else: await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            if p.get("photo_id"): 
+                await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            else: 
+                await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
+
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
         f"مرحباً بك في <b>شركة بورسعيد لاستيراد وتصدير الملابس</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
@@ -344,7 +354,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     uid = str(update.effective_user.id)
     
-    # 1. نسخ الأصناف أولاً قبل أي تفريغ لضمان عدم ضياع البيانات
     cart = list(user_carts.get(uid, []))
     if not cart:
         await query.message.reply_text("🛒 الفاتورة فارغة بالفعل.")
@@ -355,7 +364,12 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        link_prefix = f"{it['link']}\n" if i == 1 else ""
+        
+        if i == 1:
+            link_prefix = f"{it['link']}\n\n"
+        else:
+            link_prefix = ""
+            
         lines_wa.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
         tot_sum += it.get('total', 0)
         
@@ -364,7 +378,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
-    # 2. تفريغ السلة بعد بناء الرابط بنجاح تام
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
