@@ -199,7 +199,7 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ تمت إضافة {label} بنجاح!",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
-            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
         ])
     )
 
@@ -248,7 +248,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
-                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
+                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
             ])
         )
 
