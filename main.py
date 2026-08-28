@@ -3,7 +3,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# بياناتك الخاصة بشركة بورسعيد
 BOT_TOKEN = "8925183383:AAHJs1AW5QcKok-DlYUMjZds1239dW1HPNQ"
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
@@ -180,7 +179,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"مرحباً بك في <b>شركة بورسعيد لاستيراد وتصدير الملابس</b> 🛍️\n🛒 الأصناف في فاتورتك: <b>{cnt}</b>",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt})", callback_data="view_cart")],
-            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
     )
@@ -195,7 +194,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
     
     tot = calculate_item_total(p, qty)
     lbl = get_quantity_label(qty)
-    p_link = p.get("link", get_user_channel(uid))
+    p_link = p.get("link", DEFAULT_CHANNEL_LINK)
     user_last_channel[uid] = p_link
     save_data(CHANNELS_FILE, user_last_channel)
     
@@ -215,7 +214,7 @@ async def handle_quantity_selection(update: Update, context: ContextTypes.DEFAUL
         f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(f"🛒 عرض الفاتورة ({len(user_carts[uid])})", callback_data="view_cart")],
-            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
+            [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
     )
@@ -240,7 +239,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         qty = int(d[0]) * 12
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
-        p_link = p.get("link", get_user_channel(uid))
+        p_link = p.get("link", DEFAULT_CHANNEL_LINK)
         user_last_channel[uid] = p_link
         save_data(CHANNELS_FILE, user_last_channel)
         
@@ -261,7 +260,7 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             f"✅ تمت إضافة <b>{lbl}</b> بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة", callback_data="view_cart")],
-                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=p_link)]
+                [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
             ]),
             parse_mode=ParseMode.HTML
         )
@@ -269,12 +268,12 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     cart = user_carts.get(uid, [])
     if not cart:
-        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
+        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
         await bot.send_message(chat_id=chat_id, text="🛒 <b>الفاتورة فارغة الآن.</b>\nيمكنك الرجوع للقناة واختيار الموديلات التي ترغب بها:", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
         return
         
     lines = []
-    last_link = cart[-1].get("link", get_user_channel(uid)) if cart else get_user_channel(uid)
+    last_link = cart[-1].get("link", DEFAULT_CHANNEL_LINK) if cart else DEFAULT_CHANNEL_LINK
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it['price'] > 0 else ""
         ti = f" = {it['total']}ج" if it['total'] > 0 else ""
@@ -339,7 +338,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     cart = user_carts.get(uid, [])
     if not cart:
-        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
+        kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
         await query.message.reply_text("🛒 <b>الفاتورة فارغة.</b>", reply_markup=kb_empty, parse_mode=ParseMode.HTML)
         return
     
@@ -404,7 +403,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
-    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=get_user_channel(uid))]])
+    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
     await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
 
 if __name__ == "__main__":
