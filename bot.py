@@ -128,7 +128,7 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
     save_data(CARTS_FILE, user_carts)
     await query.message.reply_text(
-        f"✅ تمت إضافة {label} بنجاح!\nالإجمالي: {tot} ج.م",
+        f"✅ تمت إضافة {label} بنجاح!",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")],
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
@@ -165,7 +165,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
         await update.message.reply_text(
-            f"✅ تمت إضافة {label} بنجاح!\nالإجمالي: {tot} ج.م",
+            f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")],
                 [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
@@ -299,7 +299,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
-    await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
+    await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
