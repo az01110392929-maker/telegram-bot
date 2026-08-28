@@ -37,16 +37,67 @@ def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
 def parse_post_text(text):
+    text_clean = clean_str(text)
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     if not lines: return None
-    title, unit_price, doz_price = lines[0], 0.0, 0.0
+    
+    title = lines[0]
+    unit_price = 0.0
+    doz_price = 0.0
+    has_piece_price = False
+    
     for l in lines:
         cl = clean_str(l)
-        if "سعر" in cl or "دستة" in cl or "دسته" in cl:
+        if "سعر القطعه" in cl or "سعر القطعة" in cl or ("القطعه" in cl and "سعر" in cl) or ("القطعة" in cl and "سعر" in cl) or ("يعني" in cl and "القطعه" in cl) or ("يعنى" in cl and "القطعه" in cl):
             d = re.findall(r'\d+(?:\.\d+)?', cl)
-            if d: doz_price = float(d[0])
-    if doz_price > 0: unit_price = round(doz_price / 12, 2)
-    return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": 3}
+            if d:
+                unit_price = float(d[0])
+                has_piece_price = True
+        elif "سعر الدسته" in cl or "سعر الدستة" in cl or "الدسته" in cl or "دستة" in cl:
+            d = re.findall(r'\d+(?:\.\d+)?', cl)
+            if d and doz_price == 0: doz_price = float(d[0])
+
+    if doz_price > 0 and unit_price == 0:
+        unit_price = round(doz_price / 12, 2)
+    elif unit_price > 0 and doz_price == 0:
+        doz_price = round(unit_price * 12, 2)
+
+    # تطبيق القاعدة الدقيقة حسب طلبك
+    min_qty = 3  # الافتراضي ربع دستة
+    
+    if "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص دستة" in text_clean:
+        min_qty = 6
+    elif "ربع دسته" in text_clean or "ربع دستة" in text_clean:
+        min_qty = 3
+    elif has_piece_price:
+        min_qty = 3  # إذا وجد سعر القطعة يبدأ من ربع دستة
+    elif doz_price > 0 and not has_piece_price:
+        min_qty = 12 # إذا وجد سعر الدستة فقط بدون سعر القطعة أقل حاجة دستة
+
+    return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
+
+def generate_quantity_keyboard(pid, min_qty):
+    all_options = [
+        (3, "📦 ربع (3 ق)"),
+        (6, "📦 نص (6 ق)"),
+        (9, "📦 دستة إلا ربع (9 ق)"),
+        (12, "📦 دستة (12 ق)"),
+        (15, "📦 دستة وربع (15 ق)"),
+        (18, "📦 دستة ونص (18 ق)"),
+        (24, "📦 2 دستة (24 ق)"),
+        (36, "📦 3 دستة (36 ق)")
+    ]
+    
+    valid_buttons = []
+    for q, label in all_options:
+        if q >= min_qty:
+            valid_buttons.append(InlineKeyboardButton(label, callback_data=f"add_{pid}_{q}"))
+            
+    kb = []
+    for i in range(0, len(valid_buttons), 2):
+        kb.append(valid_buttons[i:i+2])
+    kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري", callback_data=f"custom_{pid}")])
+    return InlineKeyboardMarkup(kb)
 
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post or update.edited_channel_post
@@ -74,13 +125,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         if p:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📦 ربع (3 ق)", callback_data=f"add_{pid}_3"), InlineKeyboardButton("📦 نص (6 ق)", callback_data=f"add_{pid}_6")],
-                [InlineKeyboardButton("📦 دستة إلا ربع (9 ق)", callback_data=f"add_{pid}_9"), InlineKeyboardButton("📦 دستة (12 ق)", callback_data=f"add_{pid}_12")],
-                [InlineKeyboardButton("📦 دستة وربع (15 ق)", callback_data=f"add_{pid}_15"), InlineKeyboardButton("📦 دستة ونص (18 ق)", callback_data=f"add_{pid}_18")],
-                [InlineKeyboardButton("📦 2 دستة (24 ق)", callback_data=f"add_{pid}_24"), InlineKeyboardButton("📦 3 دستة (36 ق)", callback_data=f"add_{pid}_36")],
-                [InlineKeyboardButton("✍️ كتابة كمية اخري", callback_data=f"custom_{pid}")]
-            ])
+            kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
             if p.get("photo_id"): await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else: await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
