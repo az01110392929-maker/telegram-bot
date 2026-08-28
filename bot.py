@@ -264,7 +264,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
-    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2.5 أو 3 دستة", parse_mode=ParseMode.HTML)
+    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2.5 أو 2 دستة ونص", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -273,17 +273,27 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         txt = clean_str(update.message.text.strip())
         p = state["product"]
         
+        # استخراج الأرقام وقراءة الكسور مثل (ونص / نصف / وربع)
         d = re.findall(r'\d+(?:\.\d+)?', txt)
         if not d: 
             await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
             
         val = float(d[0])
-        if val in [3, 6, 9] and "دست" not in txt and "دستة" not in txt and "دسته" not in txt:
+        
+        # إذا كتب العميل رقم مع كلمة ونص أو نصف
+        if "نص" in txt or "نصف" in txt:
+            val += 0.5
+        elif "ربع" in txt:
+            val += 0.25
+        elif "الا ربع" in txt or "إلا ربع" in txt:
+            val -= 0.25
+
+        if val in [3, 6, 9] and "دست" not in txt and "دستة" not in txt and "دسته" not in txt and "نص" not in txt and "ربع" not in txt:
             qty = int(val)
         else:
-            if val <= 15 and ("دست" in txt or "دستة" in txt or "دسته" in txt or val < 10):
-                qty = int(val * 12)
+            if val <= 20 and ("دست" in txt or "دستة" in txt or "دسته" in txt or "نص" in txt or "ربع" in txt or val < 10):
+                qty = int(round(val * 12))
             else:
                 qty = int(val)
                 
@@ -438,7 +448,7 @@ if __name__ == "__main__":
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
-    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
+    app.add_handler(CallbackType:=CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
@@ -446,7 +456,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    print("البوت يعمل الآن بكفاءة...")
-    app.run_polling(drop_pending_updates=True)
-    
+    app.add_handler(
