@@ -123,14 +123,6 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     if data:
         pid = str(post.message_id)
         data["photo_id"] = post.photo[-1].file_id if post.photo else None
-        
-        # استخراج رابط مباشر للصورة من تيليجرام إذا كانت موجودة لكي يتم إرسالها لواتساب
-        if post.photo:
-            file_obj = await context.bot.get_file(post.photo[-1].file_id)
-            data["photo_url"] = file_obj.file_path
-        else:
-            data["photo_url"] = ""
-
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
         else:
@@ -198,10 +190,9 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
     label = get_qty_label(qty)
     p_link = p.get("link", DEFAULT_CHANNEL_LINK)
-    p_photo_url = p.get("photo_url", "")
     if uid not in user_carts: user_carts[uid] = []
     user_carts[uid].append({
-        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id"), "photo_url": p_photo_url
+        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link
     })
     save_data(CARTS_FILE, user_carts)
     cnt = len(user_carts[uid])
@@ -247,10 +238,9 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
         label = get_qty_label(qty)
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
-        p_photo_url = p.get("photo_url", "")
         if uid not in user_carts: user_carts[uid] = []
         user_carts[uid].append({
-            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id"), "photo_url": p_photo_url
+            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
@@ -279,7 +269,7 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>{pi}{ti}\n🖼️ <a href='{it['link']}'>رابط الموديل</a>")
+        lines.append(f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>{pi}{ti}\n🖼️ رابط: {it['link']}")
         
     tot_sum = sum(it.get('total', 0) for it in cart)
     tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else ""
@@ -365,8 +355,9 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        p_img = f"\n🖼️ صورة الموديل: {it['photo_url']}" if it.get('photo_url') else ""
-        lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}{p_img}\n🔗 رابط المنشور: {it['link']}")
+        # وضع رابط الصنف الأول في البداية لكي يجلب واتساب صوره المصغرة تلقائياً
+        link_prefix = f"{it['link']}\n" if i == 1 else ""
+        lines_wa.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
         tot_sum += it.get('total', 0)
         
     tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م" if tot_sum > 0 else ""
