@@ -22,7 +22,6 @@ user_carts = load_data(CARTS_FILE)
 bot_config = load_data(CONFIG_FILE)
 user_last_channel = load_data(CHANNELS_FILE)
 user_state = {}
-sent_delete_messages = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -248,7 +247,7 @@ async def send_cart_view(bot, chat_id, uid):
     summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join(lines) + tot_txt_html
     
     keyboard = [
-        [InlineKeyboardButton("📲 إرسال الفاتورة عبر واتساب", callback_data="send_wa_and_clear")],
+        [InlineKeyboardButton("📲 إرسال الفاتورة عبر واتساب", callback_data="send_wa")],
         [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=last_link)],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
@@ -260,7 +259,7 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     await send_cart_view(context.bot, update.effective_chat.id, uid)
 
-async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
@@ -282,12 +281,13 @@ async def send_wa_and_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
+    # تفريغ السلة بعد إرسال الواتساب بنجاح
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح الواتساب وإرسال الفاتورة الآن", url=wa_link)]])
     await query.message.reply_text(
-        "✅ <b>تم تأكيد الأوردر وتفريغ السلة بنجاح!</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الفاتورة فوراً:",
+        "✅ <b>تم تجهيز الفاتورة بنجاح!</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
         reply_markup=kb,
         parse_mode=ParseMode.HTML
     )
@@ -306,7 +306,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
-    app.add_handler(CallbackQueryHandler(send_wa_and_clear, pattern="^send_wa_and_clear$"))
+    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
