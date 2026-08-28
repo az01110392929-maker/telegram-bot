@@ -192,7 +192,7 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p_link = p.get("link", DEFAULT_CHANNEL_LINK)
     if uid not in user_carts: user_carts[uid] = []
     user_carts[uid].append({
-        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id")
+        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link
     })
     save_data(CARTS_FILE, user_carts)
     cnt = len(user_carts[uid])
@@ -240,7 +240,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
         if uid not in user_carts: user_carts[uid] = []
         user_carts[uid].append({
-            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id")
+            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
@@ -271,8 +271,8 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
         link_prefix = f"{it['link']}\n" if i == 1 else ""
         lines.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
-        tot_sum = sum(it.get('total', 0) for it in cart)
         
+    tot_sum = sum(it.get('total', 0) for it in cart)
     tot_txt_html = f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else ""
     summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + tot_txt_html
     
@@ -307,7 +307,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
     sent_delete_messages[uid] = []
 
-    m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه مع صورته والكمية:</b>", parse_mode=ParseMode.HTML)
+    m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
     
     for idx, it in enumerate(cart, 1):
@@ -335,11 +335,19 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except: pass
         sent_delete_messages[uid] = []
     
+    rem_name = ""
     if uid in user_carts and 0 <= idx < len(user_carts[uid]):
         rem = user_carts[uid].pop(idx)
         save_data(CARTS_FILE, user_carts)
-        await query.message.reply_text(f"🗑️ تم حذف ({rem['title']}) بنجاح!")
+        rem_name = rem['title']
     
+    # حذف رسالة الأزرار القديمة وإرسال إشعار سريع ثم عرض الفاتورة المحدثة مباشرة
+    try:
+        await query.message.delete()
+    except:
+        pass
+
+    await query.message.reply_text(f"🗑️ تم حذف ({rem_name}) بنجاح!")
     await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
 
 async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -397,4 +405,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling()
-        
+    
