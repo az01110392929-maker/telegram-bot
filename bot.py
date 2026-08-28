@@ -44,7 +44,6 @@ def parse_post_text(text):
     if not title: title = lines[0]
     title += code
     
-    # قراءة دقيقة للأسعار تتجاهل الحروف والرموز الزخرفية مثل (ج) أو (ط) بجانب الرقم
     for l in lines:
         cl = clean_str(l)
         if "سعر الدسته" in cl or ("الدسته" in cl and "سعر" in cl) or "دستة" in cl:
@@ -53,11 +52,9 @@ def parse_post_text(text):
         elif "سعر القطعه" in cl or ("القطعه" in cl and "سعر" in cl) or "السعر" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d and doz_price == 0:
-                # التأكد أن السطر لا يقصد سعر الدستة
                 if "دستة" not in cl and "دسته" not in cl:
                     unit_price = float(d[0])
 
-    # فحص عام إذا وكلمة السعر مع رقم منفرد بدون تحديد قطعه أو دسته
     if unit_price == 0 and doz_price == 0:
         for l in lines:
             cl = clean_str(l)
@@ -74,7 +71,6 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
-    # تحديد الحد الأدنى (Min Qty) بناءً على قواعدك
     min_qty = 12
     if "ربع دسته" in text_clean or "ربع" in text_clean:
         min_qty = 3
@@ -108,7 +104,13 @@ def get_quantity_label(qty):
         15: "دستة وربع (15 قطعة)",
         18: "دستة ونصف (18 قطعة)",
         21: "دستتين إلا ربع (21 قطعة)",
-        24: "2 دستة (24 قطعة)"
+        24: "2 دستة (24 قطعة)",
+        30: "2 دستة ونص (30 قطعه)",
+        36: "3 دستة (36 قطعة)",
+        42: "3.5 دستة (42 قطعة)",
+        48: "4 دستة (48 قطعة)",
+        60: "5 دستة (60 قطعة)",
+        72: "6 دستة (72 قطعة)"
     }
     if qty in labels:
         return labels[qty]
@@ -131,8 +133,12 @@ def generate_quantity_keyboard(post_id, min_qty):
         (6, "نص دستة"),
         (9, "دستة إلا ربع"),
         (12, "1 دستة"),
+        (15, "دستة وربع"),
+        (18, "دستة ونصف"),
         (24, "2 دستة"),
+        (30, "2 دستة ونص"),
         (36, "3 دستة"),
+        (42, "3.5 دستة"),
         (48, "4 دستة"),
         (60, "5 دستة"),
         (72, "6 دستة")
@@ -141,7 +147,7 @@ def generate_quantity_keyboard(post_id, min_qty):
     row = []
     for q, n in all_q:
         if q >= min_qty:
-            row.append(InlineKeyboardButton(f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
+            row.append(InlineKeyboardButton(f"📦 {n} ({q} قطعه)" if q == 30 else f"📦 {n} ({q} ق)", callback_data=f"add_{post_id}_{q}"))
             if len(row) == 2: kb.append(row); row = []
     if row: kb.append(row)
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
@@ -233,7 +239,7 @@ async def ask_custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"action": "waiting_custom_qty", "product": p, "pid": pid}
-    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2 دستة", parse_mode=ParseMode.HTML)
+    await query.message.reply_text(f"✍️ اكتب الكمية المطلوبة للموديل:\n({html.escape(p['title'])})\n• مثل: 6 أو 2.5 أو 3 دستة", parse_mode=ParseMode.HTML)
 
 async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -242,19 +248,19 @@ async def handle_user_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         txt = clean_str(update.message.text.strip())
         p = state["product"]
         
-        d = re.findall(r'\d+', txt)
+        d = re.findall(r'\d+(?:\.\d+)?', txt)
         if not d: 
             await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
             
-        val = int(d[0])
+        val = float(d[0])
         if val in [3, 6, 9] and "دست" not in txt and "دستة" not in txt and "دسته" not in txt:
-            qty = val
+            qty = int(val)
         else:
             if val <= 15 and ("دست" in txt or "دستة" in txt or "دسته" in txt or val < 10):
-                qty = val * 12
+                qty = int(val * 12)
             else:
-                qty = val
+                qty = int(val)
                 
         tot = calculate_item_total(p, qty)
         lbl = get_quantity_label(qty)
@@ -416,4 +422,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
     print("البوت يعمل الآن بكفاءة...")
     app.run_polling(drop_pending_updates=True)
-                
+    
