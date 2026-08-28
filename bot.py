@@ -123,11 +123,20 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     if data:
         pid = str(post.message_id)
         data["photo_id"] = post.photo[-1].file_id if post.photo else None
+        
+        # استخراج رابط مباشر للصورة من تيليجرام إذا كانت موجودة لكي يتم إرسالها لواتساب
+        if post.photo:
+            file_obj = await context.bot.get_file(post.photo[-1].file_id)
+            data["photo_url"] = file_obj.file_path
+        else:
+            data["photo_url"] = ""
+
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
         else:
             cid = str(post.chat.id).replace('-100', '')
             data["link"] = f"https://t.me/c/{cid}/{post.message_id}"
+            
         products_db[pid] = data
         save_data(DB_FILE, products_db)
         try:
@@ -166,7 +175,7 @@ def get_qty_label(qty):
         18: "دستة ونصف (18 قطعة)",
         24: "2 دستة (24 قطعة)",
         27: "2 دستة وربع (27 قطعة)",
-        30: "2 دستة ونصف (30 قطعة)",
+        30: "2 دستة ونص (30 قطعة)",
         36: "3 دستة (36 قطعة)",
         42: "3.5 دستة (42 قطعة)",
         48: "4 دستة (48 قطعة)",
@@ -189,9 +198,10 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
     label = get_qty_label(qty)
     p_link = p.get("link", DEFAULT_CHANNEL_LINK)
+    p_photo_url = p.get("photo_url", "")
     if uid not in user_carts: user_carts[uid] = []
     user_carts[uid].append({
-        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id")
+        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id"), "photo_url": p_photo_url
     })
     save_data(CARTS_FILE, user_carts)
     cnt = len(user_carts[uid])
@@ -237,9 +247,10 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
         label = get_qty_label(qty)
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
+        p_photo_url = p.get("photo_url", "")
         if uid not in user_carts: user_carts[uid] = []
         user_carts[uid].append({
-            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id")
+            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p.get("photo_id"), "photo_url": p_photo_url
         })
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
@@ -354,7 +365,8 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, it in enumerate(cart, 1):
         pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
+        p_img = f"\n🖼️ صورة الموديل: {it['photo_url']}" if it.get('photo_url') else ""
+        lines_wa.append(f"{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}{p_img}\n🔗 رابط المنشور: {it['link']}")
         tot_sum += it.get('total', 0)
         
     tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م" if tot_sum > 0 else ""
