@@ -71,12 +71,13 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
+    # تحديد الحد الأدنى بدقة بناءً على النص والصورة
     min_qty = 12
     if "ربع دسته" in text_clean or "ربع" in text_clean:
         min_qty = 3
     elif "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص" in text_clean:
         min_qty = 6
-    elif "اول دسته" in text_clean or "من اول" in text_clean:
+    elif "اول دسته" in text_clean or "من اول" in text_clean or "سعر الدسته" in text_clean:
         min_qty = 12
     else:
         if unit_price > 0 and doz_price == 0:
@@ -128,21 +129,48 @@ def get_quantity_label(qty):
 
 def generate_quantity_keyboard(post_id, min_qty):
     kb = []
-    all_q = [
-        (3, "ربع دستة"),
-        (6, "نص دستة"),
-        (9, "دستة إلا ربع"),
-        (12, "1 دستة"),
-        (15, "دستة وربع"),
-        (18, "دستة ونصف"),
-        (24, "2 دستة"),
-        (30, "2 دستة ونص"),
-        (36, "3 دستة"),
-        (42, "3.5 دستة"),
-        (48, "4 دستة"),
-        (60, "5 دستة"),
-        (72, "6 دستة")
-    ]
+    
+    # تحديد القائمة المناسبة حسب الحد الأدنى للموديل
+    if min_qty == 12:
+        # إذا كان الحد الأدنى دستة (يعرض دسات كاملة فقط)
+        all_q = [
+            (12, "1 دستة"),
+            (24, "2 دستة"),
+            (36, "3 دستة"),
+            (48, "4 دستة"),
+            (60, "5 دستة"),
+            (72, "6 دستة")
+        ]
+    elif min_qty == 6:
+        # إذا كان الحد الأدنى نص دستة
+        all_q = [
+            (6, "نص دستة"),
+            (12, "1 دستة"),
+            (18, "دستة ونصف"),
+            (24, "2 دستة"),
+            (30, "2 دستة ونص"),
+            (36, "3 دستة"),
+            (48, "4 دستة"),
+            (60, "5 دستة"),
+            (72, "6 دستة")
+        ]
+    else:
+        # إذا كان الحد الأدنى ربع دستة (يعرض كل الخيارات المتدرجة)
+        all_q = [
+            (3, "ربع دستة"),
+            (6, "نص دستة"),
+            (9, "دستة إلا ربع"),
+            (12, "1 دستة"),
+            (15, "دستة وربع"),
+            (18, "دستة ونصف"),
+            (24, "2 دستة"),
+            (30, "2 دستة ونص"),
+            (36, "3 دستة"),
+            (42, "3.5 دستة"),
+            (48, "4 دستة"),
+            (60, "5 دستة"),
+            (72, "6 دستة")
+        ]
         
     row = []
     for q, n in all_q:
@@ -417,7 +445,6 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.message.reply_text("تم تفريغ الفاتورة بنجاح ✅", reply_markup=kb_empty)
 
 if __name__ == "__main__":
-    # زيادة سرعة المعالجة واستيعاب الدفعات الكبيرة (Concurrency)
     app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -429,10 +456,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.UpdateType.CHANNEL_POST, handle_channel_post))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.UpdateType.EDITED_CHANNEL_POST, handle_edited_channel_post))
-    
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
-    print("البوت يعمل الآن بكفاءة...")
-    app.run_polling(drop_pending_updates=True)
-                    
+    app.add_handler(MessageHandler(filte
