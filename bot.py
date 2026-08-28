@@ -66,8 +66,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
         except: pass
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+           async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, args = str(update.effective_user.id), context.args
     if uid not in user_carts: user_carts[uid] = []
     if args and args[0].startswith("buy_"):
@@ -178,7 +177,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]),
             parse_mode=ParseMode.HTML
         )
-
 async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     cart = user_carts.get(uid, [])
     if not cart:
@@ -285,7 +283,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
-    # تفريغ الفاتورة تلقائياً بعد الإرسال
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     
@@ -318,4 +315,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling()
-        
+    
