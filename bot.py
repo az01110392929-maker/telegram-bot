@@ -71,7 +71,6 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
-    # تحديد الحد الأدنى بدقة بناءً على النص والصورة
     min_qty = 12
     if "ربع دسته" in text_clean or "ربع" in text_clean:
         min_qty = 3
@@ -130,9 +129,7 @@ def get_quantity_label(qty):
 def generate_quantity_keyboard(post_id, min_qty):
     kb = []
     
-    # تحديد القائمة المناسبة حسب الحد الأدنى للموديل
     if min_qty == 12:
-        # إذا كان الحد الأدنى دستة (يعرض دسات كاملة فقط)
         all_q = [
             (12, "1 دستة"),
             (24, "2 دستة"),
@@ -142,7 +139,6 @@ def generate_quantity_keyboard(post_id, min_qty):
             (72, "6 دستة")
         ]
     elif min_qty == 6:
-        # إذا كان الحد الأدنى نص دستة
         all_q = [
             (6, "نص دستة"),
             (12, "1 دستة"),
@@ -155,7 +151,6 @@ def generate_quantity_keyboard(post_id, min_qty):
             (72, "6 دستة")
         ]
     else:
-        # إذا كان الحد الأدنى ربع دستة (يعرض كل الخيارات المتدرجة)
         all_q = [
             (3, "ربع دستة"),
             (6, "نص دستة"),
@@ -181,7 +176,9 @@ def generate_quantity_keyboard(post_id, min_qty):
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{post_id}")])
     return InlineKeyboardMarkup(kb)
 
-async def process_post(post):
+async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    post = update.channel_post or update.edited_channel_post
+    if not post: return
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
@@ -200,14 +197,6 @@ async def process_post(post):
             await post.edit_reply_markup(reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛍️ تسوق واطلب هذا الموديل", url=f"https://t.me/{BOT_USERNAME}?start=buy_{pid}")]]))
         except Exception as e:
             logging.info(f"Could not edit markup for post {pid}: {e}")
-
-async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.channel_post:
-        await process_post(update.channel_post)
-
-async def handle_edited_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.edited_channel_post:
-        await process_post(update.edited_channel_post)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, args = str(update.effective_user.id), context.args
@@ -456,4 +445,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_quantity_selection, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(ask_custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filte
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_user_messages))
+    print("البوت يعمل الآن بكفاءة...")
+    app.run_polling(drop_pending_updates=True)
+    
