@@ -82,6 +82,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(f"مرحباً بك في شركة بورسعيد 🛍️\nالأصناف في فاتورتك: {cnt}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"عرض الفاتورة ({cnt})", callback_data="view_cart")]]))
 
+def get_qty_label(qty):
+    doz = qty / 12
+    if doz.is_integer():
+        return f"{int(doz)} دستة ({qty} قطعة)"
+    else:
+        return f"{doz} دستة ({qty} قطعة)"
+
 async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -90,10 +97,11 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     tot = int((p.get('doz_price', p['price']*12) / 12) * qty)
+    label = get_qty_label(qty)
     if uid not in user_carts: user_carts[uid] = []
-    user_carts[uid].append({"title": p['title'], "qty": qty, "label": f"{qty} قطعة", "total": tot, "link": p.get("link", DEFAULT_CHANNEL_LINK)})
+    user_carts[uid].append({"title": p['title'], "qty": qty, "label": label, "total": tot, "link": p.get("link", DEFAULT_CHANNEL_LINK)})
     save_data(CARTS_FILE, user_carts)
-    await query.message.reply_text(f"✅ تمت الإضافة بنجاح!\nإجمالي الصنف: {tot} ج.م", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")]]))
+    await query.message.reply_text(f"✅ تمت إضافة {label} بنجاح!\nالإجمالي: {tot} ج.م", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")]]))
 
 async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -102,23 +110,25 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"product": p}
-    await query.message.reply_text("✍️ اكتب الكمية المطلوبة أرقاماً (مثل: 3 أو 5):")
+    await query.message.reply_text("✍️ اكتب الكمية المطلوبة أرقاماً (مثل: 3 أو 4 أو 2.5):")
 
 async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     if uid in user_state:
         p = user_state[uid]["product"]
-        try: doz = float(update.message.text.strip())
+        txt = clean_str(update.message.text.strip())
+        try: doz = float(re.findall(r'\d+(?:\.\d+)?', txt)[0])
         except: 
             await update.message.reply_text("⚠️ أدخل رقماً صحيحاً.")
             return
         qty = int(doz * 12)
         tot = int((p.get('doz_price', p['price']*12) / 12) * qty)
+        label = get_qty_label(qty)
         if uid not in user_carts: user_carts[uid] = []
-        user_carts[uid].append({"title": p['title'], "qty": qty, "label": f"{qty} قطعة", "total": tot, "link": p.get("link", DEFAULT_CHANNEL_LINK)})
+        user_carts[uid].append({"title": p['title'], "qty": qty, "label": label, "total": tot, "link": p.get("link", DEFAULT_CHANNEL_LINK)})
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
-        await update.message.reply_text(f"✅ تمت الإضافة بنجاح!\nالإجمالي: {tot} ج.م", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")]]))
+        await update.message.reply_text(f"✅ تمت إضافة {label} بنجاح!\nالإجمالي: {tot} ج.م", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛒 عرض الفاتورة", callback_data="view_cart")]]))
 
 async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
