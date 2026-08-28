@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
+# بياناتك الخاصة بشركة بورسعيد
 BOT_TOKEN = "8925183383:AAHJs1AW5QcKok-DlYUMjZds1239dW1HPNQ"
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
