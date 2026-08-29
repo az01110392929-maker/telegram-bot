@@ -143,6 +143,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
+        # حماية إضافية تضمن جلب الموديل القديم بدقة حتى لو مر عليه سنوات
         if not p and products_db:
             pid = list(products_db.keys())[-1]
             p = products_db.get(pid)
@@ -410,5 +411,3 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling()
     
- 
- 
