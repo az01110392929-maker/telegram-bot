@@ -153,6 +153,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p = products_db.get(pid)
             
         if p:
+            # تخزين آخر موديل تفاعل معه المستخدم تلقائياً لكي لا يعلق أبداً
+            user_state[uid] = {"last_product": p}
             kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
             if p.get("photo_id"): 
@@ -200,6 +202,8 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid, qty = parts[1], int(parts[2])
     p = products_db.get(pid)
     if not p: return
+    # حفظ آخر موديل تفاعل معه المستخدم
+    user_state[uid] = {"last_product": p}
     unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
     tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
     label = get_qty_label(qty)
@@ -225,13 +229,22 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, pid = str(update.effective_user.id), query.data.replace("custom_", "")
     p = products_db.get(pid)
     if not p: return
-    user_state[uid] = {"product": p}
+    user_state[uid] = {"product": p, "last_product": p}
     await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥):")
 
 async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
+    # التحقق الذكي: إذا كان هناك منتج قيد الكتابة أو آخر منتج تفاعل معه المستخدم
+    p = None
     if uid in user_state:
-        p = user_state[uid]["product"]
+        p = user_state[uid].get("product") or user_state[uid].get("last_product")
+    
+    # إذا لم يجد، يأخذ أحدث منتج في القاعدة لكي لا يعلق أبداً
+    if not p and products_db:
+        last_pid = list(products_db.keys())[-1]
+        p = products_db.get(last_pid)
+
+    if p:
         txt = clean_str(update.message.text.strip())
         try: 
             d = re.findall(r'\d+(?:\.\d+)?', txt)
@@ -259,9 +272,12 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p_photo
         })
         save_data(CARTS_FILE, user_carts)
-        user_state.pop(uid, None)
+        # إزالة حالة الكتابة فقط مع الاحتفاظ بآخر منتج
+        if uid in user_state:
+            user_state[uid].pop("product", None)
+            
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -285,21 +301,6 @@ async def send_cart_view(bot, chat_id, uid):
     
     summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + (f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else "")
     
-    # القاعدة الصحيحة: أول مرة يظهر "حذف صنف من الفاتورة"، وبعد الحذف يظهر "حذف صنف آخر من الفاتورة"
-    # سنعكس الشرط: لو عدد الأصناف الكلي (أو الافتراضي) يعني لو لسه مابداش يحذف يظهر "حذف صنف"، أو نجعلها: 
-    # إذا كانت الفاتورة بها أكثر من صنف، نظهر "حذف صنف من الفاتورة" أول مرة، وبعد أول حذف تتحول إلى "حذف صنف آخر". 
-    # ولتثبيت ذلك بدقة: لو الفاتورة فيها أصناف، أول ظهور يكون "حذف صنف من الفاتورة"، وعندما يتم حذف صنف وتصبح الفاتورة محدثة يظهر "حذف صنف آخر من الفاتورة".
-    # سنستخدم متغير أو قاعدة بناءً على عدد الأصناف: لو العدد مثلاً أكبر من أو يساوي الحد الأقصى أو ببساطة:
-    # أول مرة (عند عرض الفاتورة لأول مرة): "حذف صنف من الفاتورة"
-    # بعد أول حذف: يظهر "حذف صنف آخر من الفاتورة"
-    
-    # لمعرفة هل هذه أول مرة أم بعد حذف؟ يمكننا تتبع ذلك عبر حالة المستخدم أو عدد الأصناف مقارنة بالحذف.
-    # الأسهل والأدق: إذا كان الزر يظهر لأول مرة نظهر "حذف صنف من الفاتورة"، وبعد أول عملية حذف نظهر "حذف صنف آخر".
-    # سنقوم بتخزين حالة في user_state أو التحقق من وجود مفتاح للحذف.
-    
-    # طريقة أذكياء وأبسط: إذا كانت هذه هي أول مرة يعرض فيها السلة بعد إضافات (ولم يتم الحذف بعد)، يظهر "حذف صنف من الفاتورة".
-    # دعنا نضع علم (flag) في user_carts أو user_state لكل مستخدم.
-    
     has_deleted = user_state.get(uid, {}).get("has_deleted", False)
     if not has_deleted:
         del_btn_text = "❌ حذف صنف من الفاتورة"
@@ -318,7 +319,6 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    # تصفير حالة الحذف عند فتح الفاتورة لأول مرة من السلة
     if uid in user_state:
         user_state[uid]["has_deleted"] = False
     else:
@@ -374,7 +374,6 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         save_data(CARTS_FILE, user_carts)
         rem_name = rem['title']
     
-    # تفعيل علامة أنه تم الحذف لكي يتحول الزر في المرة القادمة إلى "حذف صنف آخر"
     if uid not in user_state:
         user_state[uid] = {}
     user_state[uid]["has_deleted"] = True
