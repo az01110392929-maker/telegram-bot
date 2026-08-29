@@ -124,7 +124,7 @@ def generate_quantity_keyboard(pid, min_qty):
     for i in range(0, len(valid_buttons), 2):
         kb.append(valid_buttons[i:i+2])
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{pid}")])
-    return InlineKeyboardMarkup(kb>
+    return InlineKeyboardMarkup(kb)
 
 async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post or update.edited_channel_post
@@ -154,7 +154,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # حماية فائقة الذكاء: إذا لم يجد المنتج برقم الرسالة، يبحث عنه تلقائياً في آخر المنتجات المسجلة لكي لا تظهر رسالة الخطأ أبداً
         if not p and products_db:
             pid = list(products_db.keys())[-1]
             p = products_db.get(pid)
