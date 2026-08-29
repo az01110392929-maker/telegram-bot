@@ -137,7 +137,7 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if post.photo:
             data["photo_id"] = post.photo[-1].file_id
-        
+            
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
         else:
@@ -503,4 +503,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     
     app.run_polling(drop_pending_updates=True)
-        
+    
