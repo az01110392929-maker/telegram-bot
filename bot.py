@@ -62,19 +62,21 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
-    # تحديد الحد الأدنى للكمية بدقة بناءً على نص المنشور
+    # تحديد الحد الأدنى للكمية بناءً على الشروط (لو سعر القطعة فقط يبقى ربع 3 قطع، لو سعر الدستة فقط يبقى دستة 12 قطعة)
     min_qty = 3
-    if "من اول دسته" in text_clean or "من اول دستة" in text_clean or "دستة" in text_clean or "دسته" in text_clean:
+    if "من اول دسته" in text_clean or "من اول دستة" in text_clean:
         min_qty = 12
-    
-    if "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص دستة" in text_clean:
+    elif "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص دستة" in text_clean:
         min_qty = 6
     elif "ربع دسته" in text_clean or "ربع دستة" in text_clean:
         min_qty = 3
-    elif has_piece_price and "ربع" not in text_clean and "نص" not in text_clean and "نصف" not in text_clean:
+    elif has_piece_price and doz_price == 0:
         min_qty = 3
-    elif doz_price > 0 and not has_piece_price and "ربع" not in text_clean and "نص" not in text_clean:
+    elif doz_price > 0 and not has_piece_price:
         min_qty = 12
+    elif "دستة" in text_clean or "دسته" in text_clean:
+        if "ربع" not in text_clean and "نص" not in text_clean:
+            min_qty = 12
 
     return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
@@ -152,7 +154,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p = products_db.get(pid)
             
         if p:
-            kb = generate_quantity_keyboard(pid, p.get('min_qty', 12))
+            kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -412,5 +414,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
-    app.run_polling()
-    
+    app.run_polling(drop_pending_updates=True)
+        
