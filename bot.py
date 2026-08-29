@@ -153,7 +153,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p = products_db.get(pid)
             
         if p:
-            # تخزين آخر موديل تفاعل معه المستخدم تلقائياً لكي لا يعلق أبداً
             user_state[uid] = {"last_product": p}
             kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
@@ -202,7 +201,6 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid, qty = parts[1], int(parts[2])
     p = products_db.get(pid)
     if not p: return
-    # حفظ آخر موديل تفاعل معه المستخدم
     user_state[uid] = {"last_product": p}
     unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
     tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
@@ -230,16 +228,14 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"product": p, "last_product": p}
-    await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥):")
+    await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥ أو 4 دسته ونص):")
 
 async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    # التحقق الذكي: إذا كان هناك منتج قيد الكتابة أو آخر منتج تفاعل معه المستخدم
     p = None
     if uid in user_state:
         p = user_state[uid].get("product") or user_state[uid].get("last_product")
     
-    # إذا لم يجد، يأخذ أحدث منتج في القاعدة لكي لا يعلق أبداً
     if not p and products_db:
         last_pid = list(products_db.keys())[-1]
         p = products_db.get(last_pid)
@@ -250,16 +246,18 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             d = re.findall(r'\d+(?:\.\d+)?', txt)
             if not d: raise ValueError()
             doz = float(d[0])
+            
+            # تحليل الكلمات العربية المضافة بجانب الرقم
+            if "نص" in txt or "نصف" in txt:
+                if doz == int(doz): doz += 0.5
+            elif "ربع" in txt:
+                if "الا" in txt or "إلا" in txt:
+                    if doz == int(doz): doz -= 0.25
+                else:
+                    if doz == int(doz): doz += 0.25
         except: 
-            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً أو عشرياً (مثل: 4 أو 2.5).")
+            await update.message.reply_text("⚠️ أدخل رقماً صحيحاً أو عشرياً (مثل: 4 أو 2.5 أو 4 دسته ونص).")
             return
-        
-        if "نص" in txt or "نصف" in txt:
-            if doz == int(doz): doz += 0.5
-        elif "ربع" in txt:
-            if doz == int(doz): doz += 0.25
-        elif "الا ربع" in txt or "إلا ربع" in txt:
-            if doz == int(doz): doz -= 0.25
 
         qty = int(round(doz * 12))
         unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
@@ -272,7 +270,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p_photo
         })
         save_data(CARTS_FILE, user_carts)
-        # إزالة حالة الكتابة فقط مع الاحتفاظ بآخر منتج
         if uid in user_state:
             user_state[uid].pop("product", None)
             
