@@ -126,7 +126,8 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
-        pid = str(post.message_id)
+        # استخدام معرف فريد يعتمد على العنوان واسم الموديل لضمان عدم ضياعه أو تبديله أبداً
+        pid = re.sub(r'\W+', '_', data['title'][:20]) + "_" + str(post.message_id)
         data["photo_id"] = post.photo[-1].file_id if post.photo else None
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
@@ -148,10 +149,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # حماية صارمة: إذا لم يتم العثور على الموديل بدقة، لا تفتح منتجاً عشوائياً بل أخبر المستخدم بوضوح
+        # حماية صارمة مطلقة: إذا لم يوجد الموديل بدقة، لا يفتح منتجاً خطأ بل ينبه العميل بلطف
         if not p:
             await update.message.reply_text(
-                "⚠️ عذراً، هذا الموديل قديم أو غير مسجل في النظام.\nيرجى التسوق من الموديلات الجديدة المضافة حديثاً في القناة ✅",
+                "⚠️ عذراً، هذا الموديل غير متوفر حالياً أو تم تحديثه.\nيرجى اختيار موديل آخر من القناة ✅",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة", url=DEFAULT_CHANNEL_LINK)]])
             )
             return
@@ -200,7 +201,9 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid, parts = str(update.effective_user.id), query.data.split("_")
-    pid, qty = parts[1], int(parts[2])
+    # استخراج معرف المنتج بدقة بغض النظر عن طول العنوان
+    pid = "_".join(parts[1:-1])
+    qty = int(parts[-1])
     p = products_db.get(pid)
     if not p: return
     unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
