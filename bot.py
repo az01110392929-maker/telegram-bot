@@ -62,20 +62,24 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
+    # تحديد الحد الأدنى للكمية بدقة بناءً على نص المنشور
     min_qty = 3
+    if "من اول دسته" in text_clean or "من اول دستة" in text_clean or "دستة" in text_clean or "دسته" in text_clean:
+        min_qty = 12
+    
     if "نص دسته" in text_clean or "نصف دسته" in text_clean or "نص دستة" in text_clean:
         min_qty = 6
     elif "ربع دسته" in text_clean or "ربع دستة" in text_clean:
         min_qty = 3
-    elif has_piece_price or "ربع" in text_clean:
+    elif has_piece_price and "ربع" not in text_clean and "نص" not in text_clean and "نصف" not in text_clean:
         min_qty = 3
-    elif doz_price > 0 and not has_piece_price:
+    elif doz_price > 0 and not has_piece_price and "ربع" not in text_clean and "نص" not in text_clean:
         min_qty = 12
 
     return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
 
 def generate_quantity_keyboard(pid, min_qty):
-    if min_qty == 12:
+    if min_qty >= 12:
         all_options = [
             (12, "📦 دستة (12 ق)"),
             (24, "📦 2 دستة (24 ق)"),
@@ -143,13 +147,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # حماية إضافية تضمن جلب الموديل القديم بدقة حتى لو مر عليه سنوات
         if not p and products_db:
             pid = list(products_db.keys())[-1]
             p = products_db.get(pid)
             
         if p:
-            kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
+            kb = generate_quantity_keyboard(pid, p.get('min_qty', 12))
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
