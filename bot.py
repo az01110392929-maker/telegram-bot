@@ -31,6 +31,7 @@ def save_data(p, d):
 products_db = load_data(DB_FILE)
 user_carts = load_data(CARTS_FILE)
 user_state = {}
+sent_delete_messages = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -134,7 +135,9 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id_str = str(post.chat.id).replace('-100', '')
         pid = f"{chat_id_str}_{post.message_id}"
         
-        data["photo_id"] = post.photo[-1].file_id if post.photo else None
+        if post.photo:
+            data["photo_id"] = post.photo[-1].file_id
+        
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
         else:
@@ -491,15 +494,13 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.add_handler(CallbackQueryHandler, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
-    # دعم شامل للمنشورات المفردة وألبومات الصور (Media Groups)
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     
     app.run_polling(drop_pending_updates=True)
-    
+        
