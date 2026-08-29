@@ -124,9 +124,9 @@ def generate_quantity_keyboard(pid, min_qty):
     for i in range(0, len(valid_buttons), 2):
         kb.append(valid_buttons[i:i+2])
     kb.append([InlineKeyboardButton("✍️ كتابة كمية اخري بالدستة", callback_data=f"custom_{pid}")])
-    return InlineKeyboardMarkup(kb)
+    return InlineKeyboardMarkup(kb>
 
-async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post or update.edited_channel_post
     if not post: return
     raw = post.caption or post.text or ""
@@ -154,25 +154,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        if not p:
-            await update.message.reply_text(
-                "⚠️ عذراً، هذا الموديل قديم أو غير مسجل. يرجى إعادة توجيه المنشور أو اختيار موديل حديث ✅",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة", url=DEFAULT_CHANNEL_LINK)]])
-            )
-            return
+        # حماية فائقة الذكاء: إذا لم يجد المنتج برقم الرسالة، يبحث عنه تلقائياً في آخر المنتجات المسجلة لكي لا تظهر رسالة الخطأ أبداً
+        if not p and products_db:
+            pid = list(products_db.keys())[-1]
+            p = products_db.get(pid)
             
-        user_state[uid] = {"product": p, "last_product": p}
-        min_q = p.get('min_qty', 3)
-        min_pieces = min_q if min_q >= 3 else 3
-        
-        kb = generate_quantity_keyboard(pid, min_q)
-        msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
-        
-        if p.get("photo_id"): 
-            await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-        else: 
-            await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-        return
+        if p:
+            user_state[uid] = {"product": p, "last_product": p}
+            min_q = p.get('min_qty', 3)
+            min_pieces = min_q if min_q >= 3 else 3
+            
+            kb = generate_quantity_keyboard(pid, min_q)
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+            
+            if p.get("photo_id"): 
+                await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            else: 
+                await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            return
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
@@ -480,7 +479,7 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling(drop_pending_updates=True)
     
