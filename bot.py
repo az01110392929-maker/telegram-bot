@@ -31,7 +31,6 @@ def save_data(p, d):
 products_db = load_data(DB_FILE)
 user_carts = load_data(CARTS_FILE)
 user_state = {}
-sent_delete_messages = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -335,7 +334,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_state[uid].pop("product", None)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -492,11 +491,15 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
+    app.add_handler(CallbackQueryHandler, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    
+    # دعم شامل للمنشورات المفردة وألبومات الصور (Media Groups)
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
+    
     app.run_polling(drop_pending_updates=True)
     
