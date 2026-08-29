@@ -62,7 +62,6 @@ def parse_post_text(text):
     elif unit_price > 0 and doz_price == 0:
         doz_price = round(unit_price * 12, 2)
 
-    # تحديد الحد الأدنى للكمية بناءً على الشروط (لو سعر القطعة فقط يبقى ربع 3 قطع، لو سعر الدستة فقط يبقى دستة 12 قطعة)
     min_qty = 3
     if "من اول دسته" in text_clean or "من اول دستة" in text_clean:
         min_qty = 12
@@ -262,7 +261,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
         user_state.pop(uid, None)
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -270,7 +269,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
-async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
+async def send_cart_view(bot, chat_id, uid):
     cart = user_carts.get(uid, [])
     if not cart:
         await bot.send_message(
@@ -286,12 +285,10 @@ async def send_cart_view(bot, chat_id, uid, is_after_delete=False):
     
     summary = f"📋 <b>فاتورة طلبات الجملة ({len(cart)} أصناف):</b>\n\n" + "\n\n".join([f"<b>{i}. {html.escape(it['title'])}</b>\n📦 الكمية: <b>{it['label']}</b>" + (f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else "") + (f" = {it['total']}ج" if it.get('total', 0) > 0 else "") + f"\n🖼️ <a href='{it['link']}'>رابط الموديل</a>" for i, it in enumerate(cart, 1)]) + (f"\n\n💰 <b>إجمالي الفاتورة الكلي:</b> {tot_sum} ج.م" if tot_sum > 0 else "")
     
-    del_btn_text = "❌ حذف صنف آخر" if is_after_delete else "❌ حذف صنف"
-    
     keyboard = [
         [InlineKeyboardButton("📲 إرسال الفاتورة عبر واتساب", callback_data="send_wa")],
         [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=last_link)],
-        [InlineKeyboardButton(del_btn_text, callback_data="manage_items")],
+        [InlineKeyboardButton("❌ حذف صنف", callback_data="manage_items")],
         [InlineKeyboardButton("🗑️ تفريغ الفاتورة", callback_data="clear_cart")]
     ]
     await bot.send_message(chat_id=chat_id, text=summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
@@ -300,7 +297,7 @@ async def view_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(update.effective_user.id)
-    await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=False)
+    await send_cart_view(context.bot, update.effective_chat.id, uid)
 
 async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -339,6 +336,7 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try: idx = int(query.data.replace("del_", ""))
     except: idx = -1
     
+    # تنظيف رسائل اختيار الحذف القديمة
     if uid in sent_delete_messages:
         for mid in sent_delete_messages[uid]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
@@ -351,8 +349,9 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
         save_data(CARTS_FILE, user_carts)
         rem_name = rem['title']
     
+    # إرسال رسالة تأكيد قصيرة ثم عرض الفاتورة المحدثة مباشرة في نفس اللحظة
     await query.message.reply_text(f"🗑️ تم حذف ({rem_name}) بنجاح!")
-    await send_cart_view(context.bot, update.effective_chat.id, uid, is_after_delete=True)
+    await send_cart_view(context.bot, update.effective_chat.id, uid)
 
 async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -415,4 +414,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling(drop_pending_updates=True)
-        
+    
