@@ -31,7 +31,6 @@ def save_data(p, d):
 products_db = load_data(DB_FILE)
 user_carts = load_data(CARTS_FILE)
 user_state = {}
-sent_delete_messages = {}
 
 def clean_str(s):
     return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
@@ -369,26 +368,17 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
-            try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
-            except: pass
-    sent_delete_messages[uid] = []
-
-    m_head = await query.message.reply_text("🗑️ <b>اختر الصنف الذي تريد حذفه:</b>", parse_mode=ParseMode.HTML)
-    sent_delete_messages[uid].append(m_head.message_id)
-    
+    # رسالة واحدة سريعة تحتوي على أزرار لكل الأصناف لتجنب تعليق البوت مع العدد الكبير
+    kb = []
     for idx, it in enumerate(cart, 1):
-        p_total = it.get('total', 0)
-        price_line = f"\n💰 الإجمالي: {p_total} ج.م" if p_total > 0 else ""
-        cap = f"❌ <b>صنف رقم ({idx}):</b> {html.escape(it['title'])}\n📦 <b>الكمية المطلوبة:</b> {it['label']}{price_line}"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"❌ حذف هذا الصنف (رقم {idx})", callback_data=f"del_{idx-1}")]])
-        
-        if it.get("photo_id"):
-            m_item = await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
-        else:
-            m_item = await query.message.reply_text(cap, reply_markup=kb, parse_mode=ParseMode.HTML)
-        sent_delete_messages[uid].append(m_item.message_id)
+        kb.append([InlineKeyboardButton(f"❌ حذف: {it['title'][:25]} ({it['label']})", callback_data=f"del_{idx-1}")])
+    kb.append([InlineKeyboardButton("🔙 رجوع للفاتورة", callback_data="view_cart")])
+    
+    await query.message.reply_text(
+        "🗑️ <b>اختر الصنف الذي تريد حذفه من القائمة أدناه:</b>",
+        reply_markup=InlineKeyboardMarkup(kb),
+        parse_mode=ParseMode.HTML
+    )
 
 async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -396,12 +386,6 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     uid = str(update.effective_user.id)
     try: idx = int(query.data.replace("del_", ""))
     except: idx = -1
-    
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
-            try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
-            except: pass
-        sent_delete_messages[uid] = []
     
     rem_name = ""
     if uid in user_carts and 0 <= idx < len(user_carts[uid]):
