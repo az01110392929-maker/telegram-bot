@@ -133,8 +133,7 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
-        # توليد بصفرة فريدة ومستقلة تماماً تعتمد على نص المنشور ورقم الرسالة لتجنب أي تداخل بنسبة 100%
-        unique_string = f"{post.chat.id}_{post.message_id}_{data['title']}"
+        unique_string = f"{post.chat.id}_{post.message_id}"
         pid = hashlib.md5(unique_string.encode('utf-8')).hexdigest()[:10]
         
         if post.photo:
@@ -490,5 +489,6 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     
+    # تفعيل تجاوز الرسائل القديمة لمنع التهنيج عند التشغيل
     app.run_polling(drop_pending_updates=True)
     
