@@ -154,24 +154,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # التعديل الجذري الذكي: لو لم يجد الموديل (لأنه قديم أو تم تعديله)، لا يعطي خطأ أبداً، بل يفتح آخر موديل متوفر بسلاسة
-        if not p and products_db:
-            pid = list(products_db.keys())[-1]
-            p = products_db.get(pid)
-            
-        if p:
-            user_state[uid] = {"product": p, "last_product": p}
-            min_q = p.get('min_qty', 3)
-            min_pieces = min_q if min_q >= 3 else 3
-            
-            kb = generate_quantity_keyboard(pid, min_q)
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
-            
-            if p.get("photo_id"): 
-                await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            else: 
-                await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        if not p:
+            await update.message.reply_text(
+                "⚠️ عذراً، هذا الموديل قديم أو غير مسجل. يرجى إعادة توجيه المنشور أو اختيار موديل حديث ✅",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة", url=DEFAULT_CHANNEL_LINK)]])
+            )
             return
+            
+        user_state[uid] = {"product": p, "last_product": p}
+        min_q = p.get('min_qty', 3)
+        min_pieces = min_q if min_q >= 3 else 3
+        
+        kb = generate_quantity_keyboard(pid, min_q)
+        msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+        
+        if p.get("photo_id"): 
+            await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        else: 
+            await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
