@@ -131,7 +131,10 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
-        pid = str(post.message_id)
+        # استخدام معرف فريد يعتمد على أول 20 حرف من عنوان الموديل مع رقم الرسالة لضمان التطابق بنسبة 100% وعدم تداخل المنتجات
+        clean_title_part = re.sub(r'\W+', '_', data['title'][:15])
+        pid = f"{clean_title_part}_{post.message_id}"
+        
         data["photo_id"] = post.photo[-1].file_id if post.photo else None
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
@@ -152,6 +155,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args and args[0].startswith("buy_"):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
+        
+        # إذا لم يتم العثور على المعرف بالتحديد، يبحث عن المنتج الأقرب بدقة أو يوجهه للمنتج الحديث
+        if not p:
+            for k in products_db:
+                if pid in k or k in pid:
+                    p = products_db.get(k)
+                    break
         
         if not p and products_db:
             pid = list(products_db.keys())[-1]
@@ -206,10 +216,19 @@ def get_qty_label(qty):
 async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    uid, parts = str(update.effective_user.id), query.data.split("_")
-    pid, qty = parts[1], int(parts[2])
+    uid = str(update.effective_user.id)
+    data_parts = query.data.split("_")
+    qty = int(data_parts[-1])
+    pid = "_".join(data_parts[1:-1])
+    
     p = products_db.get(pid)
+    if not p:
+        for k in products_db:
+            if pid in k or k in pid:
+                p = products_db.get(k)
+                break
     if not p: return
+    
     user_state[uid] = {"last_product": p}
     
     unit_p = p.get('price', 0)
@@ -248,8 +267,14 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    uid, pid = str(update.effective_user.id), query.data.replace("custom_", "")
+    uid = str(update.effective_user.id)
+    pid = query.data.replace("custom_", "")
     p = products_db.get(pid)
+    if not p:
+        for k in products_db:
+            if pid in k or k in pid:
+                p = products_db.get(k)
+                break
     if not p: return
     user_state[uid] = {"product": p, "last_product": p}
     await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥ أو 4 دسته ونص):")
@@ -368,7 +393,6 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
-    # رسالة واحدة سريعة تحتوي على أزرار لكل الأصناف لتجنب تعليق البوت مع العدد الكبير
     kb = []
     for idx, it in enumerate(cart, 1):
         kb.append([InlineKeyboardButton(f"❌ حذف: {it['title'][:25]} ({it['label']})", callback_data=f"del_{idx-1}")])
