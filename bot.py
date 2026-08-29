@@ -154,8 +154,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         if p:
             user_state[uid] = {"last_product": p}
-            kb = generate_quantity_keyboard(pid, p.get('min_qty', 3))
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n👇 <b>اختر الكمية المطلوبة:</b>"
+            min_q = p.get('min_qty', 3)
+            min_pieces = min_q if min_q >= 3 else 3
+            
+            kb = generate_quantity_keyboard(pid, min_q)
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+            
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else: 
@@ -179,7 +183,7 @@ def get_qty_label(qty):
         9: "دستة إلا ربع (9 قطع)",
         12: "1 دستة (12 قطعة)",
         15: "دستة وربع (15 قطعة)",
-        18: "دستة ونصف (18 قطعة)",
+        18: "دستة ونص (18 قطعة)",
         24: "2 دستة (24 قطعة)",
         27: "2 دستة وربع (27 قطعة)",
         30: "2 دستة ونص (30 قطعة)",
@@ -247,7 +251,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not d: raise ValueError()
             doz = float(d[0])
             
-            # تحليل الكلمات العربية المضافة بجانب الرقم
             if "نص" in txt or "نصف" in txt:
                 if doz == int(doz): doz += 0.5
             elif "ربع" in txt:
@@ -444,4 +447,3 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling(drop_pending_updates=True)
     
- 
