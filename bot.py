@@ -77,7 +77,13 @@ def parse_post_text(text):
         if "ربع" not in text_clean and "نص" not in text_clean:
             min_qty = 12
 
-    return {"title": title, "price": unit_price, "doz_price": doz_price, "min_qty": min_qty}
+    return {
+        "title": title, 
+        "price": unit_price, 
+        "doz_price": doz_price, 
+        "min_qty": min_qty, 
+        "has_piece_price": has_piece_price
+    }
 
 def generate_quantity_keyboard(pid, min_qty):
     if min_qty >= 12:
@@ -206,14 +212,29 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p: return
     user_state[uid] = {"last_product": p}
-    unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
-    tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
+    
+    unit_p = p.get('price', 0)
+    has_piece_price = p.get('has_piece_price', False)
+    
+    doz_p = p.get('doz_price', 0)
+    if doz_p > 0:
+        tot = int((doz_p / 12) * qty)
+    else:
+        tot = int(unit_p * qty)
+
     label = get_qty_label(qty)
     p_link = p.get("link", DEFAULT_CHANNEL_LINK)
     p_photo = p.get("photo_id")
     if uid not in user_carts: user_carts[uid] = []
+    
     user_carts[uid].append({
-        "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p_photo
+        "title": p['title'], 
+        "qty": qty, 
+        "label": label, 
+        "price": unit_p if has_piece_price else 0, 
+        "total": tot, 
+        "link": p_link, 
+        "photo_id": p_photo
     })
     save_data(CARTS_FILE, user_carts)
     cnt = len(user_carts[uid])
@@ -263,14 +284,28 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         qty = int(round(doz * 12))
-        unit_p = p.get('price', round(p.get('doz_price', 0) / 12, 2))
-        tot = int((p.get('doz_price', unit_p*12) / 12) * qty)
+        unit_p = p.get('price', 0)
+        has_piece_price = p.get('has_piece_price', False)
+        
+        doz_p = p.get('doz_price', 0)
+        if doz_p > 0:
+            tot = int((doz_p / 12) * qty)
+        else:
+            tot = int(unit_p * qty)
+
         label = get_qty_label(qty)
         p_link = p.get("link", DEFAULT_CHANNEL_LINK)
         p_photo = p.get("photo_id")
         if uid not in user_carts: user_carts[uid] = []
+        
         user_carts[uid].append({
-            "title": p['title'], "qty": qty, "label": label, "price": unit_p, "total": tot, "link": p_link, "photo_id": p_photo
+            "title": p['title'], 
+            "qty": qty, 
+            "label": label, 
+            "price": unit_p if has_piece_price else 0, 
+            "total": tot, 
+            "link": p_link, 
+            "photo_id": p_photo
         })
         save_data(CARTS_FILE, user_carts)
         if uid in user_state:
@@ -446,4 +481,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     app.run_polling(drop_pending_updates=True)
-    
+        
