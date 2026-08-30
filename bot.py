@@ -163,10 +163,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     p = val
                     pid = k
                     break
-                    
-        if not p and products_db:
-            pid = list(products_db.keys())[-1]
-            p = products_db.get(pid)
             
         if p:
             user_state[uid] = {"active_pid": pid}
@@ -180,6 +176,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else: 
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            return
+        else:
+            await update.message.reply_text("⚠️ عذراً، هذا الموديل غير موجود أو تم حذفه.")
             return
 
     cnt = len(user_carts.get(uid, []))
@@ -294,10 +293,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[uid].pop("active_pid", None)
     
     p = products_db.get(pid) if pid else None
-
-    if not p and products_db:
-        pid = list(products_db.keys())[-1]
-        p = products_db.get(pid)
 
     if p:
         txt = clean_str(update.message.text)
@@ -502,7 +497,7 @@ def main():
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
+    app.add_handler(CallbackQueryHandler, manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
