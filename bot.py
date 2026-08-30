@@ -1,4 +1,3 @@
-
 import logging
 import re
 import urllib.parse
@@ -49,14 +48,15 @@ def parse_post_text(text):
     
     for l in lines:
         cl = clean_str(l)
-        if "سعر القطعه" in cl or "سعر القطعة" in cl or ("القطعه" in cl and "سعر" in cl) or ("القطعة" in cl and "سعر" in cl) or ("يعني" in cl and "القطعه" in cl) or ("يعنى" in cl and "القطعه" in cl):
+        if "سعر" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d:
-                unit_price = float(d[0])
-                has_piece_price = True
-        elif "سعر الدسته" in cl or "سعر الدستة" in cl or "الدسته" in cl or "دستة" in cl or "دسته" in cl:
-            d = re.findall(r'\d+(?:\.\d+)?', cl)
-            if d and doz_price == 0: doz_price = float(d[0])
+                val = float(d[0])
+                if "قطعه" in cl or "قطعة" in cl:
+                    unit_price = val
+                    has_piece_price = True
+                elif "دسته" in cl or "دستة" in cl:
+                    doz_price = val
 
     if doz_price > 0 and unit_price == 0:
         unit_price = round(doz_price / 12, 2)
@@ -510,3 +510,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
