@@ -508,11 +508,14 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
-    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
-    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^cust
+    h_start = CommandHandler("start", start)
+    h_view = CallbackQueryHandler(view_cart, pattern="^view_cart$")
+    h_clear = CallbackQueryHandler(clear_cart, pattern="^clear_cart$")
+    h_wa = CallbackQueryHandler(send_wa, pattern="^send_wa$")
+    h_manage = CallbackQueryHandler(manage_items, pattern="^manage_items$")
+    h_del = CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$")
+    h_add = CallbackQueryHandler(handle_qty, pattern="^add_")
+    h_custom = CallbackQueryHandler(custom_qty, pattern="^custom_")
+    
+    app.add_handler(h_start)
+    app.add_handler(h
