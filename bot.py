@@ -1,5 +1,3 @@
-
-
 import logging
 import re
 import urllib.parse
@@ -168,7 +166,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         if p:
             user_state[uid] = {"active_pid": pid}
-                        min_q = p.get('min_qty', 3)
+            min_q = p.get('min_qty', 3)
             min_pieces = min_q if min_q >= 3 else 3
             
             unit_p = p.get('price', 0)
@@ -185,6 +183,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb = generate_quantity_keyboard(pid, min_q)
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n{price_str}الحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
             
+            if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else: 
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -514,10 +513,4 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
-    
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, pr
