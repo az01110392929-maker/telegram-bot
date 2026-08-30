@@ -503,7 +503,6 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
@@ -511,5 +510,5 @@ def main():
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-    app.add_handler(CallbackGroupHandler if 'CallbackGroupHandler' in globals() else CallbackQueryHandler(custom_qty, pattern="^custom_"))
-   
+    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post
