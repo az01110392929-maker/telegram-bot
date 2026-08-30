@@ -181,11 +181,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             price_str = ""
             if unit_p > 0 and doz_p > 0:
-                price_str = f"💰 سعر القطعة: {unit_p} ج | سعر الدستة: {doz_p} ج\n"
+                price_str = f"💰 سعر القطعة: {unit_p}ج | سعر الدستة: {doz_p}ج\n"
             elif unit_p > 0:
-                price_str = f"💰 سعر القطعة: {unit_p} ج\n"
+                price_str = f"💰 سعر القطعة: {unit_p}ج\n"
             elif doz_p > 0:
-                price_str = f"💰 سعر الدستة: {doz_p} ج\n"
+                price_str = f"💰 سعر الدستة: {doz_p}ج\n"
 
             kb = generate_quantity_keyboard(pid, min_q)
             msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n{price_str}📦 الحد الأدنى للطلب: {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
@@ -513,5 +513,6 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler.delete_single_item if hasattr(CallbackQueryHandler, 'delete_single_item') else CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryH
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^cust
