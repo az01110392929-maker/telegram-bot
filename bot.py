@@ -34,7 +34,7 @@ user_state = {}
 sent_delete_messages = {}
 
 def clean_str(s):
-    return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
+    return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
 
 def parse_post_text(text):
     text_clean = clean_str(text)
@@ -53,7 +53,7 @@ def parse_post_text(text):
             if d:
                 unit_price = float(d[0])
                 has_piece_price = True
-        elif "سعر الدسته" in cl or "سعر الدستة" in cl or "الدسته" in cl or "دستة" in cl:
+        elif "سعر الدسته" in cl or "سعر الدستة" in cl or "الدسته" in cl or "دستة" in cl or "دسته" in cl:
             d = re.findall(r'\d+(?:\.\d+)?', cl)
             if d and doz_price == 0: doz_price = float(d[0])
 
@@ -299,13 +299,13 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p = products_db.get(last_pid)
 
     if p:
-        txt = clean_str(update.message.text.strip())
+        txt = clean_str(update.message.text)
         try: 
             d = re.findall(r'\d+(?:\.\d+)?', txt)
             if not d: raise ValueError()
             doz = float(d[0])
             
-            if "نص" in txt or "نصف" in txt:
+            if "نص" in txt or "نصف" in txt or "ونص" in txt:
                 if doz == int(doz): doz += 0.5
             elif "ربع" in txt:
                 if "الا" in txt or "إلا" in txt:
@@ -513,4 +513,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
     app.run_polling(drop_pending_updates=True)
-    
+            
