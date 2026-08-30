@@ -4,6 +4,7 @@ import urllib.parse
 import json
 import os
 import html
+import hashlib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -132,8 +133,8 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = post.caption or post.text or ""
     data = parse_post_text(raw)
     if data:
-        chat_id_str = str(post.chat.id).replace('-100', '')
-        pid = f"{chat_id_str}_{post.message_id}"
+        unique_string = f"{post.chat.id}_{post.message_id}_{data['title']}"
+        pid = hashlib.md5(unique_string.encode('utf-8')).hexdigest()[:10]
         
         if post.photo:
             data["photo_id"] = post.photo[-1].file_id
@@ -141,7 +142,8 @@ async def process_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if post.chat.username:
             data["link"] = f"https://t.me/{post.chat.username}/{post.message_id}"
         else:
-            data["link"] = f"https://t.me/c/{chat_id_str}/{post.message_id}"
+            cid_str = str(post.chat.id).replace('-100', '')
+            data["link"] = f"https://t.me/c/{cid_str}/{post.message_id}"
             
         products_db[pid] = data
         save_data(DB_FILE, products_db)
@@ -156,31 +158,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args and args[0].startswith("buy_"):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
-        
+            
         if not p:
-            for k, val in products_db.items():
-                if pid == k or pid in k or k in pid:
-                    p = val
-                    pid = k
-                    break
-                    
-        if not p and products_db:
-            pid = list(products_db.keys())[-1]
-            p = products_db.get(pid)
-            
-        if p:
-            user_state[uid] = {"product": p, "last_product": p}
-            min_q = p.get('min_qty', 3)
-            min_pieces = min_q if min_q >= 3 else 3
-            
-            kb = generate_quantity_keyboard(pid, min_q)
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
-            
-            if p.get("photo_id"): 
-                await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            else: 
-                await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                "⚠️ عذراً، هذا الموديل غير موجود أو تم تحديثه. يرجى اختيار الموديل مباشرة من القناة ✅",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة", url=DEFAULT_CHANNEL_LINK)]])
+            )
             return
+            
+        user_state[uid] = {"product": p, "last_product": p}
+        min_q = p.get('min_qty', 3)
+        min_pieces = min_q if min_q >= 3 else 3
+        
+        kb = generate_quantity_keyboard(pid, min_q)
+        msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+        
+        if p.get("photo_id"): 
+            await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        else: 
+            await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
 
     cnt = len(user_carts.get(uid, []))
     await update.message.reply_text(
@@ -220,14 +217,9 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     data_parts = query.data.split("_")
     qty = int(data_parts[-1])
-    pid = "_".join(data_parts[1:-1])
+    pid = data_parts[1]
     
     p = products_db.get(pid)
-    if not p:
-        for k, val in products_db.items():
-            if pid == k or pid in k or k in pid:
-                p = val
-                break
     if not p: return
     
     user_state[uid] = {"last_product": p}
@@ -271,11 +263,6 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     pid = query.data.replace("custom_", "")
     p = products_db.get(pid)
-    if not p:
-        for k, val in products_db.items():
-            if pid == k or pid in k or k in pid:
-                p = val
-                break
     if not p: return
     user_state[uid] = {"product": p, "last_product": p}
     await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥ أو 4 دسته ونص):")
@@ -470,7 +457,7 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid in user_state:
         user_state[uid]["has_deleted"] = False
     
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح الواتساب وإرسال الفاتورة الآن", url=wa_link)]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]])
     await query.message.reply_text(
         "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
         reply_markup=kb,
@@ -503,4 +490,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     
     app.run_polling(drop_pending_updates=True)
-    
+        
