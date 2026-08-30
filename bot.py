@@ -346,7 +346,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_state[uid].pop("active_pid", None)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -406,10 +406,6 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف المراد حذفه بصورته:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
-    
-    ch_filter = filters.ChatType.CHANNEL
-    ph_filter = filters.PHOTO
-    tx_filter = filters.TEXT
     
     for idx, it in enumerate(cart, 1):
         p_total = it.get('total', 0)
@@ -513,8 +509,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
-    channel_filter = filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT)
-    app.add_handler(MessageHandler(channel_filter, process_post))
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    private_filter = filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE
-    app.ad
+    app.run_polling(drop_pending_updates=True)
+    
