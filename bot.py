@@ -153,32 +153,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, args = str(update.effective_user.id), context.args
     if uid not in user_carts: user_carts[uid] = []
     
+    p = None
+    pid = None
     if args and args[0].startswith("buy_"):
-        pid = args[0].replace("buy_", "")
-        p = products_db.get(pid)
+        target_pid = args[0].replace("buy_", "")
+        p = products_db.get(target_pid)
+        pid = target_pid
         
         if not p:
             for k, val in products_db.items():
-                if pid == k or pid in k or k in pid:
+                if target_pid in k or k in target_pid:
                     p = val
                     pid = k
                     break
+        
+        if not p and products_db:
+            pid = list(products_db.keys())[-1]
+            p = products_db.get(pid)
             
         if p:
             user_state[uid] = {"active_pid": pid}
             min_q = p.get('min_qty', 3)
             min_pieces = min_q if min_q >= 3 else 3
             
+            unit_p = p.get('price', 0)
+            doz_p = p.get('doz_price', 0)
+            
+            price_str = ""
+            if unit_p > 0 and doz_p > 0:
+                price_str = f"💰 سعر القطعة: {unit_p} ج | سعر الدستة: {doz_p} ج\n"
+            elif unit_p > 0:
+                price_str = f"💰 سعر القطعة: {unit_p} ج\n"
+            elif doz_p > 0:
+                price_str = f"💰 سعر الدستة: {doz_p} ج\n"
+
             kb = generate_quantity_keyboard(pid, min_q)
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n{price_str}📦 الحد الأدنى للطلب: {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
             
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             else: 
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
-            return
-        else:
-            await update.message.reply_text("⚠️ عذراً، هذا الموديل غير موجود أو تم حذفه.")
             return
 
     cnt = len(user_carts.get(uid, []))
@@ -339,7 +354,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -498,15 +513,5 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
-    
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-    
+    app.add_handler(CallbackQueryHandler.delete_single_item if hasattr(CallbackQueryHandler, 'delete_single_item') else CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryH
