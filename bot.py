@@ -282,7 +282,6 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
     if not p: return
     
-    # تخزين رقم الموديل بدقة مطلقة مرتبطة بزر الكتابة
     user_state[uid] = {"active_pid": pid}
     await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥ أو 4 دسته ونص):")
 
@@ -295,7 +294,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     p = products_db.get(pid) if pid else None
 
-    # إذا لم يتم العثور على الموديل النشط بدقة، نأخذ آخر موديل تم التفاعل معه حصراً
     if not p and products_db:
         last_pid = list(products_db.keys())[-1]
         p = products_db.get(last_pid)
@@ -409,6 +407,10 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف المراد حذفه بصورته:</b>", parse_mode=ParseMode.HTML)
     sent_delete_messages[uid].append(m_head.message_id)
     
+    ch_filter = filters.ChatType.CHANNEL
+    ph_filter = filters.PHOTO
+    tx_filter = filters.TEXT
+    
     for idx, it in enumerate(cart, 1):
         p_total = it.get('total', 0)
         price_line = f"\n💰 الإجمالي: {p_total} ج.م" if p_total > 0 else ""
@@ -501,6 +503,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
@@ -510,5 +513,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_hand
+    channel_filter = filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT)
+    app.add_handler(MessageHandler(channel_filter, process_post))
+    
+    private_filter = filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE
+    app.ad
