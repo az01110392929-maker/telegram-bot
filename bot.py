@@ -34,7 +34,7 @@ user_state = {}
 sent_delete_messages = {}
 
 def clean_str(s):
-    return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ")
+    return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")).replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ة", "ه").replace("ى", "ي").replace("#", " ").strip()
 
 def parse_post_text(text):
     text_clean = clean_str(text)
@@ -289,14 +289,16 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     pid = None
     
+    # 1. البحث في الحالة النشطة للمستخدم
     if uid in user_state and "active_pid" in user_state[uid]:
         pid = user_state[uid]["active_pid"]
     
     p = products_db.get(pid) if pid else None
 
+    # 2. إذا لم توجد حالة نشطة، نلتقط أحدث موديل تم عرضه في قاعدة البيانات تلقائياً
     if not p and products_db:
-        last_pid = list(products_db.keys())[-1]
-        p = products_db.get(last_pid)
+        pid = list(products_db.keys())[-1]
+        p = products_db.get(pid)
 
     if p:
         txt = clean_str(update.message.text)
@@ -346,7 +348,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_state[uid].pop("active_pid", None)
             
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -512,5 +514,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    app.run_polling(drop_pending_updates=True)
-            
+    app.run_pol
