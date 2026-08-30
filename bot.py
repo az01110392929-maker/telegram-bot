@@ -6,7 +6,7 @@ import os
 import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 BOT_TOKEN = "8925183383:AAGTkjTAow_vFSjFhNcTtTPgKxDhq2h7Auo"
 BOT_USERNAME = "PortSaid_Store_bot"
@@ -289,13 +289,11 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     pid = None
     
-    # 1. البحث في الحالة النشطة للمستخدم
     if uid in user_state and "active_pid" in user_state[uid]:
         pid = user_state[uid]["active_pid"]
     
     p = products_db.get(pid) if pid else None
 
-    # 2. إذا لم توجد حالة نشطة، نلتقط أحدث موديل تم عرضه في قاعدة البيانات تلقائياً
     if not p and products_db:
         pid = list(products_db.keys())[-1]
         p = products_db.get(pid)
@@ -499,8 +497,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
     await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
@@ -514,4 +512,8 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    app.run_pol
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
+    
