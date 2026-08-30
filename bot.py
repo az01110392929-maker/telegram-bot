@@ -169,7 +169,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p = products_db.get(pid)
             
         if p:
-            user_state[uid] = {"product": p, "last_product": p}
+            user_state[uid] = {"active_pid": pid}
             min_q = p.get('min_qty', 3)
             min_pieces = min_q if min_q >= 3 else 3
             
@@ -230,8 +230,6 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
     if not p: return
     
-    user_state[uid] = {"last_product": p}
-    
     unit_p = p.get('price', 0)
     has_piece_price = p.get('has_piece_price', False)
     
@@ -256,6 +254,10 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "photo_id": p_photo
     })
     save_data(CARTS_FILE, user_carts)
+    
+    if uid in user_state:
+        user_state[uid].pop("active_pid", None)
+
     cnt = len(user_carts[uid])
     await query.message.reply_text(
         f"✅ تمت إضافة {label} بنجاح!",
@@ -270,22 +272,30 @@ async def custom_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     uid = str(update.effective_user.id)
     pid = query.data.replace("custom_", "")
+    
     p = products_db.get(pid)
     if not p:
         for k, val in products_db.items():
             if pid == k or pid in k or k in pid:
                 p = val
+                pid = k
                 break
     if not p: return
-    user_state[uid] = {"product": p, "last_product": p}
+    
+    # تخزين رقم الموديل بدقة مطلقة مرتبطة بزر الكتابة
+    user_state[uid] = {"active_pid": pid}
     await query.message.reply_text("✍️ اكتب عدد الدستات المطلوبة (مثل: 4 أو ٤ أو 2.5 أو ٢.٥ أو 4 دسته ونص):")
 
 async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    p = None
-    if uid in user_state:
-        p = user_state[uid].get("product") or user_state[uid].get("last_product")
+    pid = None
     
+    if uid in user_state and "active_pid" in user_state[uid]:
+        pid = user_state[uid]["active_pid"]
+    
+    p = products_db.get(pid) if pid else None
+
+    # إذا لم يتم العثور على الموديل النشط بدقة، نأخذ آخر موديل تم التفاعل معه حصراً
     if not p and products_db:
         last_pid = list(products_db.keys())[-1]
         p = products_db.get(last_pid)
@@ -334,10 +344,8 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         save_data(CARTS_FILE, user_carts)
         
-        # تفريغ الذاكرة لضمان عدم تعليق البوت بعد كتابة الكمية
         if uid in user_state:
-            user_state[uid].pop("product", None)
-            user_state[uid].pop("last_product", None)
+            user_state[uid].pop("active_pid", None)
             
         cnt = len(user_carts[uid])
         await update.message.reply_text(
@@ -503,7 +511,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
-    
-    app.run_polling(drop_pending_updates=True)
-    
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_hand
