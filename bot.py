@@ -291,7 +291,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if uid in user_state and "active_pid" in user_state[uid]:
         pid = user_state[uid]["active_pid"]
-        user_state[uid].pop("active_pid", None) # تفريغ الحالة فوراً لمنع التعليق
+        user_state[uid].pop("active_pid", None)
     
     p = products_db.get(pid) if pid else None
 
@@ -395,6 +395,8 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not cart:
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
+    
+    pid_to_del = query.data.replace("del_", "")
     
     if uid in sent_delete_messages:
         for mid in sent_delete_messages[uid]:
