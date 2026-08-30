@@ -465,8 +465,6 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
-    pid_to_del = query.data.replace("del_", "")
-    
     if uid in sent_delete_messages:
         for mid in sent_delete_messages[uid]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
@@ -537,4 +535,4 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             link_prefix = ""
             
-  
+        lines_wa.append(f"{link_prefix}{i}. {it['title'
