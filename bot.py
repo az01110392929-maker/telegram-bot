@@ -1,3 +1,4 @@
+
 import logging
 import re
 import urllib.parse
@@ -169,19 +170,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             min_q = p.get('min_qty', 3)
             min_pieces = min_q if min_q >= 3 else 3
             
-            unit_p = p.get('price', 0)
-            doz_p = p.get('doz_price', 0)
-            
-            price_str = ""
-            if unit_p > 0 and doz_p > 0:
-                price_str = f"💰 سعر القطعة: {unit_p}ج | سعر الدستة: {doz_p}ج\n"
-            elif unit_p > 0:
-                price_str = f"💰 سعر القطعة: {unit_p}ج\n"
-            elif doz_p > 0:
-                price_str = f"💰 سعر الدستة: {doz_p}ج\n"
-
             kb = generate_quantity_keyboard(pid, min_q)
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n{price_str}الحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
             
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -503,6 +493,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
@@ -511,4 +502,11 @@ def main():
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post
+    
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
+    
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
