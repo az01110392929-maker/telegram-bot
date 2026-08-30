@@ -337,7 +337,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_state[uid].pop("product", None)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -490,7 +490,6 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
@@ -503,11 +502,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.PHOTO | filters.TEXT), process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, msg_handler))
     
-    PORT = int(os.environ.get("PORT", "8080"))
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL") 
+    app.run_polling(drop_pending_updates=True)
     
-    if WEBHOOK_URL:
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=f"
