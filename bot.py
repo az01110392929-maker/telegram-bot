@@ -291,6 +291,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if uid in user_state and "active_pid" in user_state[uid]:
         pid = user_state[uid]["active_pid"]
+        user_state[uid].pop("active_pid", None) # تفريغ الحالة فوراً لمنع التعليق
     
     p = products_db.get(pid) if pid else None
 
@@ -341,9 +342,6 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "photo_id": p_photo
         })
         save_data(CARTS_FILE, user_carts)
-        
-        if uid in user_state:
-            user_state[uid].pop("active_pid", None)
             
         cnt = len(user_carts[uid])
         await update.message.reply_text(
