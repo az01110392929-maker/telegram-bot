@@ -333,11 +333,14 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "photo_id": p_photo
         })
         save_data(CARTS_FILE, user_carts)
+        
+        # تفريغ الذاكرة لضمان عدم تعليق البوت بعد كتابة الكمية
         if uid in user_state:
             user_state[uid].pop("product", None)
+            user_state[uid].pop("last_product", None)
             
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
