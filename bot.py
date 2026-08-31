@@ -17,7 +17,6 @@ DB_NAME = "store.db"
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# إنشاء جداول قاعدة البيانات إذا لم تكن موجودة
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -50,7 +49,6 @@ def init_db():
 
 init_db()
 
-# دوال التعامل مع قاعدة البيانات للمنتجات
 def get_product(pid):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -94,7 +92,6 @@ def get_all_products():
         }
     return db
 
-# دوال التعامل مع سلة المشتريات في قاعدة البيانات
 def get_cart(uid):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -316,8 +313,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]),
         parse_mode=ParseMode.HTML
     )
-
-def get_qty_label(qty):
+    def get_qty_label(qty):
     labels = {
         3: "ربع دستة (3 قطع)",
         6: "نص دستة (6 قطع)",
@@ -544,4 +540,83 @@ async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE)
     cart = get_cart(uid)
     rem_name = ""
     if 0 <= idx < len(cart):
-        rem_name = cart
+        rem_name = cart[idx]['title']
+        remove_cart_item_at(uid, idx)
+    
+    if uid not in user_state:
+        user_state[uid] = {}
+    user_state[uid]["has_deleted"] = True
+    
+    await query.message.reply_text(f"🗑️ تم حذف ({rem_name}) بنجاح!")
+    await send_cart_view(context.bot, update.effective_chat.id, uid)
+
+async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    uid = str(update.effective_user.id)
+    
+    cart = get_cart(uid)
+    if not cart:
+        await query.message.reply_text("🛒 الفاتورة فارغة بالفعل.")
+        return
+        
+    lines_wa = []
+    tot_sum = 0
+    for i, it in enumerate(cart, 1):
+        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
+        
+        if i == 1:
+            link_prefix = f"{it['link']}\n\n"
+        else:
+            link_prefix = ""
+            
+        lines_wa.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
+        tot_sum += it.get('total', 0)
+        
+    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م" if tot_sum > 0 else ""
+    wa_msg = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة التالي:\n\n" + "\n\n".join(lines_wa) + tot_txt_wa
+    encoded_wa = urllib.parse.quote(wa_msg)
+    wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
+    
+    clear_user_cart(uid)
+    if uid in user_state:
+        user_state[uid]["has_deleted"] = False
+    
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]])
+    await query.message.reply_text(
+        "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML
+    )
+
+async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
+    query = update.callback_query
+    await query.answer()
+    uid = str(update.effective_user.id)
+    clear_user_cart(uid)
+    if uid in user_state:
+        user_state[uid]["has_deleted"] = False
+    kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
+    await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
+
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
+    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
+    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
+    
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
+    
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
+    
