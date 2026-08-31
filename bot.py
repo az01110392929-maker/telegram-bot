@@ -158,7 +158,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # استرجاع تلقائي للمنشور من تيليجرام إذا تم مسح الملف المحلي
         if not p:
             try:
                 parts = pid.split("_")
@@ -212,8 +211,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]),
         parse_mode=ParseMode.HTML
     )
-
-def get_qty_label(qty):
+  def get_qty_label(qty):
     labels = {
         3: "ربع دستة (3 قطع)",
         6: "نص دستة (6 قطع)",
@@ -519,4 +517,16 @@ def main():
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.a
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
+    
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
+    
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
+    
