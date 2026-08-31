@@ -158,7 +158,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # الميزة الجديدة: إذا لم يتم العثور على المنتج محلياً، يتم جلبه مباشرة من القناة بالاستعانة برقم الرسالة
         if not p:
             try:
                 parts = pid.split("_")
@@ -517,4 +516,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
-    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa
+    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
+    app.add_handler(Callba
