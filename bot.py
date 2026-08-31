@@ -158,9 +158,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
+        # البحث الذكي والمرين لتجنب مشكلة "هذا الموديل غير موجود"
         if not p:
             for k, val in products_db.items():
-                if pid == k or pid in k or k in pid:
+                if pid in k or k in pid or pid.split("_")[-1] == k.split("_")[-1]:
                     p = val
                     pid = k
                     break
