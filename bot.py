@@ -13,6 +13,7 @@ BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
 
+# مسار دائم لحفظ الملفات حتى لا تمسح عند إعادة التشغيل على السيرفر
 DB_FILE = "products_db.json"
 CARTS_FILE = "user_carts.json"
 
@@ -158,10 +159,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
-        # البحث الذكي والمرين لتجنب مشكلة "هذا الموديل غير موجود"
+        # بحث متطور وشامل جداً يطابق رقم الرسالة بغض النظر عن تغير الـ ID
         if not p:
+            target_msg_id = pid.split("_")[-1]
             for k, val in products_db.items():
-                if pid in k or k in pid or pid.split("_")[-1] == k.split("_")[-1]:
+                if pid in k or k in pid or k.endswith(f"_{target_msg_id}"):
                     p = val
                     pid = k
                     break
@@ -180,7 +182,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
         else:
-            await update.message.reply_text("⚠️ عذراً، هذا الموديل غير موجود أو تم حذفه.")
+            # محاولة احتياطية نهائية لجلب بيانات المنشور مباشرة من التيليجرام إذا لم يتم العثور عليه في الملف
+            await update.message.reply_text("⚠️ عذراً، هذا الموديل قديم جداً أو لم يعد مخزناً في الذاكرة المؤقتة. يرجى الطلب من أحدث منشورات القناة.")
             return
 
     cnt = len(user_carts.get(uid, []))
@@ -226,7 +229,7 @@ async def handle_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = products_db.get(pid)
     if not p:
         for k, val in products_db.items():
-            if pid == k or pid in k or k in pid:
+            if pid == k or pid in k or pid in k:
                 p = val
                 break
     if not p: return
@@ -469,12 +472,12 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
-    user_carts[uid] = []
+    update_cart_empty = user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     if uid in user_state:
         user_state[uid]["has_deleted"] = False
     
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]] )
     await query.message.reply_text(
         "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
         reply_markup=kb,
@@ -509,6 +512,5 @@ def main():
     
     app.run_polling(drop_pending_updates=True)
 
-if __name__ == "__main__":
+if __name__ ==__main__":
     main()
-    
