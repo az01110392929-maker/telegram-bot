@@ -312,8 +312,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
-    )
-    def get_qty_label(qty):
+     def get_qty_label(qty):
     labels = {
         3: "ربع دستة (3 قطع)",
         6: "نص دستة (6 قطع)",
