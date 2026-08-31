@@ -171,8 +171,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             min_q = p.get('min_qty', 3)
             min_pieces = min_q if min_q >= 3 else 3
             
+            # تجهيز النصوص الخاصة بالسعر والحد الأدنى لعرضها فوق الأزرار مباشرة
+            price_info = ""
+            if p.get('doz_price', 0) > 0:
+                price_info += f"📦 سعر الدستة: <b>{p['doz_price']} ج</b>\n"
+            if p.get('price', 0) > 0:
+                price_info += f"💵 سعر القطعة: <b>{p['price']} ج</b>\n"
+                
             kb = generate_quantity_keyboard(pid, min_q)
-            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\nالحد الأدنى للطلب : {min_pieces} قطع\n👇 <b>اختر الكمية المطلوبة:</b>"
+            msg = f"🛍️ <b>الموديل:</b> {html.escape(p['title'])}\n{price_info}📌 الحد الأدنى للطلب: <b>{min_pieces} قطع</b>\n\n👇 <b>اختر الكمية المطلوبة:</b>"
             
             if p.get("photo_id"): 
                 await update.message.reply_photo(photo=p["photo_id"], caption=msg, reply_markup=kb, parse_mode=ParseMode.HTML)
@@ -453,18 +460,12 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines_wa = []
     tot_sum = 0
     for i, it in enumerate(cart, 1):
-        pi = f" (القطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        pi = f" (قطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
         ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-        
-        if i == 1:
-            link_prefix = f"{it['link']}\n\n"
-        else:
-            link_prefix = ""
-            
-        lines_wa.append(f"{link_prefix}{i}. {it['title']}\n📦 الكمية: {it['label']}{pi}{ti}\n🖼️ رابط: {it['link']}")
+        lines_wa.append(f"{i}. {it['title']}\n   📦 الكمية: {it['label']}{pi}{ti}\n   🔗 {it['link']}")
         tot_sum += it.get('total', 0)
         
-    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م" if tot_sum > 0 else ""
+    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م"
     wa_msg = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة التالي:\n\n" + "\n\n".join(lines_wa) + tot_txt_wa
     encoded_wa = urllib.parse.quote(wa_msg)
     wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
@@ -476,7 +477,7 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]])
     await query.message.reply_text(
-        "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب فوراً:",
+        "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب كاملاً:",
         reply_markup=kb,
         parse_mode=ParseMode.HTML
     )
@@ -511,4 +512,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
