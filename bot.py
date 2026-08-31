@@ -1,3 +1,5 @@
+
+
 import logging
 import re
 import urllib.parse
@@ -159,25 +161,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p = products_db.get(pid)
         
         if not p:
-            try:
-                parts = pid.split("_")
-                if len(parts) == 2:
-                    channel_chat_id = int("-100" + parts[0])
-                    msg_id = int(parts[1])
-                    forwarded = await context.bot.forward_message(chat_id=update.effective_chat.id, from_chat_id=channel_chat_id, message_id=msg_id)
-                    raw = forwarded.caption or forwarded.text or ""
-                    await forwarded.delete()
-                    p = parse_post_text(raw)
-                    if p:
-                        if forwarded.photo:
-                            p["photo_id"] = forwarded.photo[-1].file_id
-                        p["link"] = f"https://t.me/c/{parts[0]}/{msg_id}"
-                        products_db[pid] = p
-                        save_data(DB_FILE, products_db)
-            except:
-                pass
-
-        if not p:
             target_msg_id = pid.split("_")[-1]
             for k, val in products_db.items():
                 if pid in k or k in pid or k.endswith(f"_{target_msg_id}"):
@@ -210,7 +193,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]
         ]),
         parse_mode=ParseMode.HTML
-    def get_qty_label(qty):
+    )
+
+def get_qty_label(qty):
     labels = {
         3: "ربع دستة (3 قطع)",
         6: "نص دستة (6 قطع)",
@@ -528,4 +513,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
