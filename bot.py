@@ -1,3 +1,5 @@
+
+
 import logging
 import re
 import urllib.parse
@@ -497,7 +499,7 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
-    app.add_handler(CallbackQueryHandler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$") if False else clear_cart, pattern="^clear_cart$")) # تم ضبطه ليعمل بسلاسة
+    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
@@ -511,4 +513,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
