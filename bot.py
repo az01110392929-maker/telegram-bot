@@ -158,10 +158,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pid = args[0].replace("buy_", "")
         p = products_db.get(pid)
         
+        # الميزة الجديدة: إذا لم يتم العثور على المنتج محلياً، يتم جلبه مباشرة من القناة بالاستعانة برقم الرسالة
         if not p:
-            target_msg_id = pid.split("_")[-1]
+            try:
+                parts = pid.split("_")
+                if len(parts) == 2:
+                    channel_chat_id = int("-100" + parts[0])
+                    msg_id = int(parts[1])
+                    forwarded = await context.bot.forward_message(chat_id=update.effective_chat.id, from_chat_id=channel_chat_id, message_id=msg_id)
+                    raw = forwarded.caption or forwarded.text or ""
+                    await forwarded.delete()
+                    p = parse_post_text(raw)
+                    if p:
+                        if forwarded.photo:
+                            p["photo_id"] = forwarded.photo[-1].file_id
+                        p["link"] = f"https://t.me/c/{parts[0]}/{msg_id}"
+                        products_db[pid] = p
+                        save_data(DB_FILE, products_db)
+            except:
+                pass
+
+        if not p:
             for k, val in products_db.items():
-                if pid in k or k in pid or k.endswith(f"_{target_msg_id}"):
+                if pid in k or k in pid or pid.split("_")[-1] == k.split("_")[-1]:
                     p = val
                     pid = k
                     break
@@ -180,7 +199,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
         else:
-            await update.message.reply_text("⚠️ عذراً، هذا الموديل غير موجود أو تم حذفه.")
+            await update.message.reply_text("⚠️ عذراً، هذا الموديل غير موجود أو تم حذفه من القناة.")
             return
 
     cnt = len(user_carts.get(uid, []))
@@ -498,17 +517,4 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
-    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
-    
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-    
+    app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa
