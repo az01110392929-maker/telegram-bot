@@ -1,10 +1,9 @@
-import logging
+Import logging
 import re
 import urllib.parse
 import json
 import os
 import html
-import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -348,7 +347,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -508,12 +507,7 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    print("🤖 Bot is starting and running continuously...")
-    while True:
-        try:
-            app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
-        except Exception as e:
-            logging.error(f"Polling crashed with error: {e}. Restarting in 5 seconds...")
-            time.sleep(5)
+    app.run_polling(drop_pending_updates=True)
 
-if __name__ =
+if __name__ == "__main__":
+    main()
