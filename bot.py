@@ -4,6 +4,7 @@ import urllib.parse
 import json
 import os
 import html
+import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -507,8 +508,10 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-    
+    # تشغيل آمن ومستقر 24/7 مع إعادة الاتصال التلقائي عند أي انقطاع
+    print("🤖 Bot is starting and running continuously...")
+    while True:
+        try:
+            app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+        except Exception as e:
+            logging.error(f"Polling crashed with error: {e}. 
