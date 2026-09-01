@@ -379,7 +379,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(start, pattern="^p_"))
     application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.CHANNEL_POST | filters.EDITED_CHANNEL_POST, handle_channel_post))
+    # تم تصحيح الفلتر هنا ليتوافق مع جميع إصدارات المكتبة الحديثة والقديمة
+    application.add_handler(MessageHandler(filters.ALL, handle_channel_post))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     application.run_polling()
