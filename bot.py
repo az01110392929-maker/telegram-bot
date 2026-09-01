@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8925183383:AAFF7T3VvjyYgsM5UthA7necExXsNHvbTzM"
+BOT_TOKEN = "8925183383:AAGwMPbWBGYPycMXQp409Ynh1EcHmXN68JQ"
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -500,7 +500,7 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackCardQueryHandler(delete_single_item, pattern="^del_\\d+$") if 'CallbackCardQueryHandler' in globals() else CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
     app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
     
