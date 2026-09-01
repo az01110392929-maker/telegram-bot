@@ -347,7 +347,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
