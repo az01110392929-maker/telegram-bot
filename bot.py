@@ -507,7 +507,8 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    app.run_polling(drop_pending_updates=True)
+    # تم تعديل هذا السطر لتجنب تداخل الجلسات واستقرار البوت على المنصة
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
