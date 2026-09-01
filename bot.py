@@ -508,10 +508,12 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    # تشغيل آمن ومستقر 24/7 مع إعادة الاتصال التلقائي عند أي انقطاع
     print("🤖 Bot is starting and running continuously...")
     while True:
         try:
             app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
         except Exception as e:
-            logging.error(f"Polling crashed with error: {e}. 
+            logging.error(f"Polling crashed with error: {e}. Restarting in 5 seconds...")
+            time.sleep(5)
+
+if __name__ 
