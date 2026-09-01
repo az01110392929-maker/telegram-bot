@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8925183383:AAEq71FScvc_veF_Wib64PUuxsjNaKYF3Ec"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -347,7 +347,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -493,6 +493,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
 def main():
+    if not BOT_TOKEN:
+        return
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -511,4 +513,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
