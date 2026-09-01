@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8925183383:AAGwMPbWBGYPycMXQp409Ynh1EcHmXN68JQ"
+BOT_TOKEN = "8925183383:AAHfS_bFbUfddURtaKK6CENNHy81yUOYGp8"
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -507,7 +507,6 @@ def main():
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
     
-    # تم تعديل هذا السطر لتجنب تداخل الجلسات واستقرار البوت على المنصة
     app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
