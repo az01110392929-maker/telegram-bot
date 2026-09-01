@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8925183383:AAGALhFG71dzShSU_bo9ZJiqDAak16P7_hM"
+BOT_TOKEN = "8925183383:AAEq71FScvc_veF_Wib64PUuxsjNaKYF3Ec"
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -511,4 +511,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
