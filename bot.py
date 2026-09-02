@@ -514,4 +514,14 @@ def main():
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_qty, patter
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
+    
+    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
+    
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
+    
