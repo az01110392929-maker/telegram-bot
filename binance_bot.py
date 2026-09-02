@@ -67,6 +67,9 @@ class MaxProtectionTradingBot:
 
         while True:
             try:
+                # طباعة إقرار دوري في السجلات لتتأكد عيناك أن بوت باينانس يراقب السوق لحظة بلحظة
+                logger.info("🔍 [Binance-Scanner] جاري فحص السوق وحركة الأسعار والمؤشرات الآن...")
+
                 # 1. جلب السعر الحالي
                 ticker = await client.get_symbol_ticker(symbol=self.symbol)
                 current_price = float(ticker['price'])
@@ -82,7 +85,7 @@ class MaxProtectionTradingBot:
                 # حساب المتوسط المتحرك البسيط قصير المدى لفلترة الاتجاه
                 sma_20 = sum(closes[-20:]) / 20
 
-                logger.info(f"السعر: {current_price} | المتوسط (SMA20): {sma_20:.2f} | RSI: {rsi:.2f} | الرصيد: {balance:.2f} USDT")
+                logger.info(f"📊 [حالة السوق] السعر: {current_price} | المتوسط (SMA20): {sma_20:.2f} | RSI: {rsi:.2f} | الرصيد المتاح: {balance:.2f} USDT")
 
                 # 4. إدارة الصفقة المفتوحة وحمايتها لحظياً من أي تراجع
                 if self.in_position:
@@ -128,9 +131,9 @@ class MaxProtectionTradingBot:
                         self.in_position = True
                         logger.info(f"تم تنفيذ الشراء بنجاح عند سعر أساسي: {self.entry_price}")
                     else:
-                        logger.info("السوق لا يوفر فرصة آمنة 100% الآن، البوت يفضل الاحتفاظ بالكاش وعدم المخاطرة...")
+                        logger.info("💤 السوق لا يوفر فرصة آمنة 100% الآن، البوت يفضل الاحتفاظ بالكاش وعدم المخاطرة...")
                 else:
-                    logger.warning("الرصيد المتاح لا يغطي الحد الأدنى للصفقة الآمنة حالياً.")
+                    logger.warning("⚠️ الرصيد المتاح لا يغطي الحد الأدنى للصفقة الآمنة حالياً.")
 
                 await asyncio.sleep(self.poll_interval)
 
