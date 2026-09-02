@@ -8,8 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# ضع بياناتك مباشرة هنا لتجنب أي مشاكل في متغيرات Railway
-BOT_TOKEN = "7578330752:AAH9b_example_token_here"  # ضع التوكن الخاص بك هنا بين العلامتين
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -507,8 +506,6 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
 def main():
-    if not BOT_TOKEN:
-        return
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -516,4 +513,6 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler(delete_
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+    app.add_handler(CallbackQueryHandl
