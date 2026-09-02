@@ -515,6 +515,3 @@ def main():
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, patter
-  
-    if _name == " _main_ ":              
-          main()
