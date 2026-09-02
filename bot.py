@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "7578330752:AAH9b_example_token_here"  # ضع التوكن الخاص بك هنا
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = "PortSaid_Store_bot"
 WHATSAPP_NUMBER = "201000744741"
 DEFAULT_CHANNEL_LINK = "https://t.me/Clothing010"
@@ -459,6 +459,7 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     tot_sum = sum(it.get('total', 0) for it in cart)
     
+    # ميزة التقسيم التلقائي (كل 20 صنفاً في رابط مستقل لضمان عدم قطع الواتساب)
     chunk_size = 20
     chunks = [cart[i:i + chunk_size] for i in range(0, len(cart), chunk_size)]
     
@@ -474,6 +475,7 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         header_text = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة (الجزء {index + 1} من {len(chunks)}):\n\n"
         wa_msg = header_text + "\n\n".join(lines_wa)
         
+        # ظهور إجمالي الفاتورة الكلي في نهاية الجزء الأخير فقط
         if index == len(chunks) - 1:
             wa_msg += f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م"
 
@@ -513,6 +515,4 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
-    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
-    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-  
+    app.add_handler(CallbackQueryHandler(delete_sin
