@@ -1,3 +1,5 @@
+
+
 import logging
 import re
 import urllib.parse
@@ -347,7 +349,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await query.message.reply_text(
+        await update.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -399,15 +401,14 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
-    uid_str = str(uid)
-    if uid_str in sent_delete_messages:
-        for mid in sent_delete_messages[uid_str]:
+    if uid in sent_delete_messages:
+        for mid in sent_delete_messages[uid]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
             except: pass
-    sent_delete_messages[uid_str] = []
+    sent_delete_messages[uid] = []
 
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف المراد حذفه بصورته:</b>", parse_mode=ParseMode.HTML)
-    sent_delete_messages[uid_str].append(m_head.message_id)
+    sent_delete_messages[uid].append(m_head.message_id)
     
     for idx, it in enumerate(cart, 1):
         p_total = it.get('total', 0)
@@ -419,7 +420,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
             m_item = await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
         else:
             m_item = await query.message.reply_text(cap, reply_markup=kb, parse_mode=ParseMode.HTML)
-        sent_delete_messages[uid_str].append(m_item.message_id)
+        sent_delete_messages[uid].append(m_item.message_id)
 
 async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -457,44 +458,30 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة بالفعل.")
         return
         
-    tot_sum = sum(it.get('total', 0) for it in cart)
-    
-    # ميزة التقسيم التلقائي (كل 20 صنفاً في رابط مستقل لضمان عدم قطع الواتساب)
-    chunk_size = 20
-    chunks = [cart[i:i + chunk_size] for i in range(0, len(cart), chunk_size)]
-    
-    await query.message.reply_text(f"✅ تم تجهيز الفاتورة الكلية ({len(cart)} صنفاً). تم تقسيمها إلى {len(chunks)} روابط لتصلك كاملة بدون أي نقص:")
-
-    for index, chunk in enumerate(chunks):
-        lines_wa = []
-        for idx, it in enumerate(chunk, start=1 + (index * chunk_size)):
-            pi = f" (قطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
-            ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
-            lines_wa.append(f"{idx}. {it['title']}\n   📦 الكمية: {it['label']}{pi}{ti}\n   🔗 {it['link']}")
-            
-        header_text = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة (الجزء {index + 1} من {len(chunks)}):\n\n"
-        wa_msg = header_text + "\n\n".join(lines_wa)
+    lines_wa = []
+    tot_sum = 0
+    for i, it in enumerate(cart, 1):
+        pi = f" (قطعة: {it['price']}ج)" if it.get('price', 0) > 0 else ""
+        ti = f" = {it['total']}ج" if it.get('total', 0) > 0 else ""
+        lines_wa.append(f"{i}. {it['title']}\n   📦 الكمية: {it['label']}{pi}{ti}\n   🔗 {it['link']}")
+        tot_sum += it.get('total', 0)
         
-        # ظهور إجمالي الفاتورة الكلي في نهاية الجزء الأخير فقط
-        if index == len(chunks) - 1:
-            wa_msg += f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م"
-
-        encoded_wa = urllib.parse.quote(wa_msg)
-        wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
-        
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"📲 إرسال الجزء ({index + 1} من {len(chunks)}) عبر واتساب", url=wa_link)]])
-        await query.message.reply_text(
-            f"📦 <b>رابط الجزء رقم {index + 1}:</b>",
-            reply_markup=kb,
-            parse_mode=ParseMode.HTML
-        )
+    tot_txt_wa = f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م"
+    wa_msg = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة التالي:\n\n" + "\n\n".join(lines_wa) + tot_txt_wa
+    encoded_wa = urllib.parse.quote(wa_msg)
+    wa_link = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_wa}"
     
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     if uid in user_state:
         user_state[uid]["has_deleted"] = False
     
-    await query.message.reply_text("🗑️ تم تفريغ السلة تلقائياً بنجاح بعد تجهيز الفاتورة.")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📲 اضغط هنا لفتح واتساب وإرسال الفاتورة", url=wa_link)]])
+    await query.message.reply_text(
+        "✅ <b>تم تجهيز الفاتورة بنجاح! وتفريغ السلة تلقائياً.</b>\n\nاضغط على الزر أدناه لفتح تطبيق الواتساب وإرسال الطلب كاملاً:",
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML
+    )
 
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     query = update.callback_query
@@ -508,6 +495,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
 def main():
+    if not BOT_TOKEN:
+        return
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -526,4 +515,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
