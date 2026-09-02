@@ -347,7 +347,7 @@ async def msg_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(CARTS_FILE, user_carts)
             
         cnt = len(user_carts[uid])
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"✅ تمت إضافة {label} بنجاح!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"🛒 عرض الفاتورة ({cnt} صنف)", callback_data="view_cart")],
@@ -399,14 +399,15 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛒 الفاتورة فارغة.")
         return
     
-    if uid in sent_delete_messages:
-        for mid in sent_delete_messages[uid]:
+    uid_str = str(uid)
+    if uid_str in sent_delete_messages:
+        for mid in sent_delete_messages[uid_str]:
             try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=mid)
             except: pass
-    sent_delete_messages[uid] = []
+    sent_delete_messages[uid_str] = []
 
     m_head = await query.message.reply_text("🗑️ <b>اختر الصنف المراد حذفه بصورته:</b>", parse_mode=ParseMode.HTML)
-    sent_delete_messages[uid].append(m_head.message_id)
+    sent_delete_messages[uid_str].append(m_head.message_id)
     
     for idx, it in enumerate(cart, 1):
         p_total = it.get('total', 0)
@@ -418,7 +419,7 @@ async def manage_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
             m_item = await query.message.reply_photo(photo=it["photo_id"], caption=cap, reply_markup=kb, parse_mode=ParseMode.HTML)
         else:
             m_item = await query.message.reply_text(cap, reply_markup=kb, parse_mode=ParseMode.HTML)
-        sent_delete_messages[uid].append(m_item.message_id)
+        sent_delete_messages[uid_str].append(m_item.message_id)
 
 async def delete_single_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -458,7 +459,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     tot_sum = sum(it.get('total', 0) for it in cart)
     
-    # تقسيم الفاتورة إلى أجزاء (بحد أقصى 20 صنفاً لكل رابط لضمان عدم قطع الواتساب)
     chunk_size = 20
     chunks = [cart[i:i + chunk_size] for i in range(0, len(cart), chunk_size)]
     
@@ -474,7 +474,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         header_text = f"مرحباً شركة بورسعيد لاستيراد وتصدير الملابس، أود تأكيد طلب الجملة (الجزء {index + 1} من {len(chunks)}):\n\n"
         wa_msg = header_text + "\n\n".join(lines_wa)
         
-        # إضافة إجمالي الفاتورة الكلي في نهاية الجزء الأخير فقط لضمان وضوح الحساب النهائي
         if index == len(chunks) - 1:
             wa_msg += f"\n\n💰 إجمالي الفاتورة الكلي: {tot_sum} ج.م"
 
@@ -488,7 +487,6 @@ async def send_wa(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML
         )
     
-    # تفريغ السلة وتحديث الحالة بعد تجهيز الروابط بنجاح
     user_carts[uid] = []
     save_data(CARTS_FILE, user_carts)
     if uid in user_state:
@@ -516,4 +514,7 @@ def main():
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(send_wa, pattern="^send_wa$"))
-    app.add_handler(CallbackQueryHandler(manage_ite
+    app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
+    app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
+ 
