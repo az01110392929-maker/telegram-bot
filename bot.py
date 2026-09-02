@@ -505,8 +505,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE=None):
     kb_empty = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع للقناة لتسوق المزيد", url=DEFAULT_CHANNEL_LINK)]])
     await query.message.reply_text("تم تفريغ الفاتورة ✅", reply_markup=kb_empty)
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(view_cart, pattern="^view_cart$"))
@@ -515,13 +514,4 @@ def main():
     app.add_handler(CallbackQueryHandler(manage_items, pattern="^manage_items$"))
     app.add_handler(CallbackQueryHandler(delete_single_item, pattern="^del_\\d+$"))
     app.add_handler(CallbackQueryHandler(handle_qty, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(custom_qty, pattern="^custom_"))
-    
-    app.add_handler(MessageHandler(filters.ChatType.CHANNEL, process_post))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
-    
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
-    
+    app.add_handler(CallbackQueryHandler
