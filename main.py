@@ -4,11 +4,16 @@ import math
 import os
 import sys
 
-# إعدادات الاتصال بمنصة OKX (تقرأ تلقائياً من متغيرات البيئة في Railway)
+# البحث الشامل عن أسماء المتغيرات بكل اختصاراتها المحتملة في Railway
+okx_api = os.getenv('OKX_API_KEY') or os.getenv('OKX_API') or os.getenv('OKX_API_KEY_KEY')
+okx_secret = os.getenv('OKX_SECRET_KEY') or os.getenv('OKX_SECRET') or os.getenv('OKX_SEC')
+okx_pass = os.getenv('OKX_PASSWORD') or os.getenv('OKX_PASS') or os.getenv('OKX_PASSPHRASE') or os.getenv('OKX_PAS')
+
+# إعدادات الاتصال بمنصة OKX
 exchange = ccxt.okx({
-    'apiKey': os.getenv('OKX_API_KEY'),
-    'secret': os.getenv('OKX_SECRET_KEY'),
-    'password': os.getenv('OKX_PASSWORD'),
+    'apiKey': okx_api,
+    'secret': okx_secret,
+    'password': okx_pass,
     'enableRateLimit': True,
     'options': {'defaultType': 'spot'}  # التداول الفوري
 })
@@ -57,7 +62,6 @@ def institutional_market_analysis(symbol):
     توافق الأطر الزمنية المتعددة (15m + 1h)، والأهداف الديناميكية (ATR)
     """
     try:
-        # 1. كشف التلاعب في دفتر الأوامر والتأكد من السيولة الحقيقية
         order_book = safe_api_call(exchange.fetch_order_book, symbol, limit=50)
         bids = order_book['bids']
         asks = order_book['asks']
@@ -68,14 +72,12 @@ def institutional_market_analysis(symbol):
         if asks_top_vol > 0 and (bids_top_vol / asks_top_vol) < 1.2:
             return None, None, None, None
 
-        # 2. فحص الترند على إطار الساعة (1h)
         ohlcv_1h = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='1h', limit=30)
         closes_1h = [c[4] for c in ohlcv_1h]
         ema_1h = sum(closes_1h) / len(closes_1h)
         if closes_1h[-1] < ema_1h:
             return None, None, None, None
 
-        # 3. فحص إطار الـ 15 دقيقة ومؤشر ATR للحسابات الديناميكية
         ohlcv_15m = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='15m', limit=50)
         if not ohlcv_15m or len(ohlcv_15m) < 50:
             return None, None, None, None
@@ -87,7 +89,6 @@ def institutional_market_analysis(symbol):
         if current_price < ema_15m:
             return None, None, None, None
 
-        # قياس التقلب الحقيقي (ATR)
         highs = [c[2] for c in ohlcv_15m[-14:]]
         lows = [c[3] for c in ohlcv_15m[-14:]]
         tr_list = [highs[i] - lows[i] for i in range(len(highs))]
@@ -97,11 +98,8 @@ def institutional_market_analysis(symbol):
         if volatility_ratio < 0.0005:
             return None, None, None, None
 
-        # حساب الأهداف الديناميكية
         dynamic_tp_pct = max(0.008, min(0.015, volatility_ratio * 1.5))
         dynamic_sl_pct = 0.0025
-
-        # حساب معيار الحجم المتكيف (Adaptive Kelly-inspired sizing factor)
         strength_score = min(1.0, (bids_top_vol / (asks_top_vol + 1e-8)) / 2.0)
 
         return True, dynamic_tp_pct, dynamic_sl_pct, strength_score
@@ -128,7 +126,6 @@ def place_order(symbol, amount_usd, price):
         return None
 
 def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, target_sl_pct):
-    """مراقبة ذكية متكاملة مع التعافي (DCA) وتتبع الأرباح الديناميكي (Trailing)"""
     current_entry_price = initial_entry_price
     total_amount = initial_amount
     total_cost = initial_entry_price * initial_amount
@@ -149,7 +146,6 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             tp_price = current_entry_price * (1 + target_tp_pct)
             sl_price = current_entry_price * (1 - target_sl_pct)
 
-            # 1. نظام التعافي الذكي (Smart DCA)
             if not dca_used and current_price <= (current_entry_price * (1 - DCA_THRESHOLD_PCT)):
                 print(f"رصد تراجع مؤقت آمن لـ {symbol}. تفعيل تعافي متوسط التكلفة (DCA)...")
                 balance_usdt = get_balance('USDT')
@@ -167,13 +163,11 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
                         dca_used = True
                         print(f"تم تعديل متوسط السعر بنجاح وأصبح: {current_entry_price}")
 
-            # 2. وقف الخسارة
             if current_price <= sl_price:
                 print(f"تنبيه: وصل السعر لـ {sl_price} -> تفعيل وقف الخسارة لحماية رأس المال.")
                 safe_api_call(exchange.create_market_sell_order, symbol, total_amount)
                 break
 
-            # 3. تتبع الأرباح الديناميكي (Trailing Take Profit)
             if current_price > highest_price:
                 highest_price = current_price
 
@@ -194,7 +188,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت المؤسسي الأسطوري: قراءة المتغيرات آلياً + حماية ضد التلاعب + تعافي ذكي ===")
+    print("=== تشغيل البوت المؤسسي الأسطوري بنجاح تام ===")
     
     while True:
         try:
