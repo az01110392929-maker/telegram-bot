@@ -138,7 +138,7 @@ class MaxProtectionTradingBot:
                 await asyncio.sleep(self.poll_interval)
 
             except BinanceAPIException as e:
-                logger.warning(f"خطأ مؤقت من منصة باينانس API: {e.message}")
+                logger.warning(f"خطأ مؤقت من منصة باينانس API: {e.message} (Code: {e.code})")
                 await asyncio.sleep(30)
             except BinanceRequestException as e:
                 logger.warning(f"مشكلة اتصال مؤقتة بالشبكة: {e}")
@@ -152,11 +152,21 @@ class MaxProtectionTradingBot:
             logger.critical("مفاتيح باينانس مفقودة تماماً في متغيرات البيئة!")
             return
 
-        client = await AsyncClient.create(self.api_key, self.api_secret)
+        logger.info("جاري تهيئة الاتصال بمنصة باينانس...")
         try:
-            await self.run_protected_strategy(client)
-        finally:
-            await client.close_connection()
+            client = await AsyncClient.create(self.api_key, self.api_secret)
+            # فحص فوري للاتصال والصلاحيات للتأكد من تخطي خطأ الـ API Keys
+            await client.get_account()
+            logger.info("تم التحقق من مفاتيح باينانس والاتصال بنجاح تام!")
+            try:
+                await self.run_protected_strategy(client)
+            finally:
+                await client.close_connection()
+        except BinanceAPIException as e:
+            logger.critical(f"❌ رفضت باينانس المفاتيح (خطأ رقم {e.code}): {e.message}")
+            logger.critical("تأكد تماماً من نسخ مفتاح الـ API ومفتاح الـ Secret بدون مسافات، وأن مفتاحك ليس محظوراً أو مقيداً بـ IP معين.")
+        except Exception as e:
+            logger.critical(f"خطأ حرج في تهيئة العميل: {e}")
 
 if __name__ == "__main__":
     try:
