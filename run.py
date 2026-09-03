@@ -1,22 +1,26 @@
 import subprocess
 import sys
 import time
+import threading
 
 def run_script(script_name):
-    return subprocess.Popen([sys.executable, script_name])
+    while True:
+        print(f"Starting {script_name}...")
+        process = subprocess.Popen([sys.executable, script_name])
+        process.wait()
+        print(f"{script_name} stopped. Restarting in 5 seconds...")
+        time.sleep(5)
 
 if __name__ == "__main__":
-    print("بدء تشغيل منظومة البوتات المتكاملة...")
-
-    # تشغيل بوت التلجرام وبوت باينانس معاً
-    p1 = run_script("bot.py")
-    p2 = run_script("binance_bot.py")
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        p1.terminate()
-        p2.terminate()
-        print("تم إيقاف النظام الموحد.")
-      
+    print("Starting Telegram and Binance bots simultaneously...")
+    
+    # تشغيل بوت تيليجرام وبوت باينانس في وقت واحد
+    t1 = threading.Thread(target=run_script, args=("bot.py",))
+    t2 = threading.Thread(target=run_script, args=("main.py",))
+    
+    t1.start()
+    t2.start()
+    
+    t1.join()
+    t2.join()
+    
