@@ -1,188 +1,237 @@
+import ccxt
+import time
+import math
 import os
-import asyncio
-import logging
-import ccxt.async_support as ccxt
+import sys
 
-# إعداد السجلات الهندسية لتوثيق وتتبع كل جزء من رأس المال بدقة فائقة
-logging.basicConfig(
-    format='%(asctime)s | [OKX-ADVANCED-BOT] | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO
-)
-logger = logging.getLogger("MaxProtectionTraderOKXAdvanced")
+# إعدادات الاتصال بمنصة OKX (تقرأ تلقائياً من متغيرات البيئة في Railway)
+exchange = ccxt.okx({
+    'apiKey': os.getenv('OKX_API_KEY'),
+    'secret': os.getenv('OKX_SECRET_KEY'),
+    'password': os.getenv('OKX_PASSWORD'),
+    'enableRateLimit': True,
+    'options': {'defaultType': 'spot'}  # التداول الفوري
+})
 
-class MaxProtectionTradingBotOKX:
-    def __init__(self):
-        self.api_key = os.getenv('OKX_API_KEY')
-        self.api_secret = os.getenv('OKX_SECRET_KEY')
-        self.passphrase = os.getenv('OKX_PASSPHRASE')
-        
-        self.symbol = 'BTC/USDT'
-        self.trade_amount_usdt = 11.0  # قيمة الصفقة
-        self.poll_interval = 20  # فترة الفحص المنتظم
-        
-        # إعدادات الحماية والأرباح المتطورة
-        self.in_position = False
-        self.entry_price = 0.0
-        self.highest_price = 0.0         # لتتبع أعلى سعر وصل له السعر بعد الشراء (للـ Trailing Stop)
-        self.take_profit_target = 0.02   # 2% هدف ربح أساسي محسّن
-        self.stop_loss_limit = 0.0035    # 0.35% وقف خسارة أولي صارم
-        self.trailing_activation = 0.01  # تفعيل الوقف المتحرك إذا حقق السعر 1% ربح
-        self.trailing_drop = 0.005       # السماح بتراجع قدره 0.5% فقط من القمة المحققة لحجز الأرباح
+# الأزواج المعتمدة لأعلى سيولة
+SYMBOLS = ['BTC/USDT', 'ETH/USDT']
 
-    async def get_available_balance(self, exchange: ccxt.okx):
-        """فحص رصيد الـ USDT المتاح للتداول بأمان تام"""
+# الإعدادات الهندسية المتقدمة
+BASE_MAX_ALLOCATION_PCT = 0.85  # الحد الأقصى لتخصيص الرصيد (85%)
+TRAILING_DROP_PCT = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
+DCA_THRESHOLD_PCT = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
+
+def safe_api_call(func, *args, **kwargs):
+    """نظام الحماية وإعادة المحاولة التلقائية عند انقطاع الشبكة (Circuit Breaker)"""
+    max_retries = 5
+    delay = 2
+    for attempt in range(max_retries):
         try:
-            balance = await exchange.fetch_balance()
-            free_usdt = balance['USDT']['free'] if 'USDT' in balance and 'free' in balance['USDT'] else 0.0
-            return float(free_usdt)
+            return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"خطأ في قراءة الرصيد الفوري من OKX: {e}")
-            return 0.0
+            print(f"تنبيه اتصال (محاولة {attempt + 1}/{max_retries}): {e}")
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(delay)
+            delay *= 2
 
-    def calculate_rsi(self, closes, period=14):
-        """حساب مؤشر القوة النسبية RSI بدقة هندسية عالية"""
-        if len(closes) < period + 1:
-            return 50.0
-        
-        gains, losses = [], []
-        for i in range(1, len(closes)):
-            change = closes[i] - closes[i - 1]
-            if change > 0:
-                gains.append(change)
-                losses.append(0)
-            else:
-                gains.append(0)
-                losses.append(abs(change))
-                
-        avg_gain = sum(gains[-period:]) / period
-        avg_loss = sum(losses[-period:]) / period
-        
-        if avg_loss == 0:
-            return 100.0
-            
-        rs = avg_gain / avg_loss
-        return 100 - (100 / (1 + rs))
-
-    async def run_protected_strategy(self, exchange: ccxt.okx):
-        logger.info("تم تفعيل النسخة المذكية والمطورة لحماية الأصول ومضاعفة الأرباح على OKX...")
-
-        while True:
-            try:
-                logger.info("🔍 [OKX-Advanced-Scanner] جاري فحص السوق وحركة الأسعار والمؤشرات بدقة...")
-
-                # 1. جلب السعر الحالي
-                ticker = await exchange.fetch_ticker(self.symbol)
-                current_price = float(ticker['last'])
-
-                # 2. فحص الرصيد المتوفر
-                balance = await self.get_available_balance(exchange)
-
-                # 3. جلب الشمعات السعرية (1 دقيقة) - نطاق أوسع لحساب المؤشرات بدقة
-                ohlcv = await exchange.fetch_ohlcv(self.symbol, timeframe='1m', limit=60)
-                closes = [float(entry[4]) for entry in ohlcv]
-                rsi = self.calculate_rsi(closes)
-                
-                # المتوسطات المتحركة لفلترة الاتجاه العام وضمان الأمان
-                sma_20 = sum(closes[-20:]) / 20
-                sma_50 = sum(closes[-50:]) / 50 if len(closes) >= 50 else sma_20
-
-                logger.info(f"📊 [حالة السوق] السعر: {current_price} | SMA20: {sma_20:.2f} | SMA50: {sma_50:.2f} | RSI: {rsi:.2f} | الكاش: {balance:.2f}")
-
-                # 4. إدارة الصفقة المفتوحة بالوقف المتحرك (Trailing Stop) وجني الأرباح
-                if self.in_position:
-                    price_diff = (current_price - self.entry_price) / self.entry_price
-                    
-                    # تحديث أعلى سعر وصل إليه السعر منذ الدخول
-                    if current_price > self.highest_price:
-                        self.highest_price = current_price
-
-                    highest_diff = (self.highest_price - self.entry_price) / self.entry_price
-                    logger.info(f"📈 صفقة نشطة. التغير الحالي: {price_diff * 100:.2f}% | أعلى قمة وصلت لها: {highest_diff * 100:.2f}%")
-
-                    # أ. هدف الربح الثابت والمستهدف الكبير
-                    if price_diff >= self.take_profit_target:
-                        logger.info("🎯 هدف الربح الممتاز تحقق! جاري جني الأرباح فوريًا...")
-                        amount_to_sell = self.trade_amount_usdt / current_price
-                        await exchange.create_market_sell_order(self.symbol, amount_to_sell)
-                        self.in_position = False
-                        logger.info("✅ تم إغلاق الصفقة بنجاح وتأمين الأرباح الكبرى.")
-
-                    # ب. نظام الوقف المتحرك الذكي (Trailing Stop): إذا صعد السعر ثم بدأ بالارتداد من القمة
-                    elif highest_diff >= self.trailing_activation and current_price <= self.highest_price * (1 - self.trailing_drop):
-                        logger.info(kf := f"🔒 تفعيل الوقف المتحرك (Trailing Stop)! تم جني الأرباح قبل انعكاس السوق من القمة...")
-                        amount_to_sell = self.trade_amount_usdt / current_price
-                        await exchange.create_market_sell_order(self.symbol, amount_to_sell)
-                        self.in_position = False
-                        logger.info("✅ تم الخروج بأمان تام مع المحافظة على الأرباح المحققة.")
-
-                    # ج. وقف الخسارة الأولي الصارم جداً لحماية رأس المال
-                    elif price_diff <= -self.stop_loss_limit:
-                        logger.warning("🛡️ حماية رأس المال: تراجع السعر دون الحد المسموح، خروج فوري لحماية الكاش...")
-                        amount_to_sell = self.trade_amount_usdt / current_price
-                        await exchange.create_market_sell_order(self.symbol, amount_to_sell)
-                        self.in_position = False
-                        logger.warning("⚠️ تم إغلاق الصفقة على خسارة طفيفة جداً لحماية الأصول بالكامل.")
-
-                # 5. شروط الدخول الذكية (التشبع البيعي + تأكيد الاتجاه الصاعد عبر SMA50)
-                elif not self.in_position and balance >= self.trade_amount_usdt:
-                    # شرط مزدوج قوي: RSI متدني جداً (فرصة شراء) + السعر فوق أو قرب متوسط 50 (اتجاه عام آمن)
-                    if rsi < 30.0 and current_price >= (sma_50 * 0.995):
-                        logger.info(f"🔥 فرصة استثمارية ذهبية مؤكدة (RSI: {rsi:.2f}). جاري تنفيذ الشراء...")
-                        amount_to_buy = self.trade_amount_usdt / current_price
-                        await exchange.create_market_buy_order(self.symbol, amount_to_buy)
-                        self.entry_price = current_price
-                        self.highest_price = current_price  # إعادة ضبط أعلى سعر
-                        self.in_position = True
-                        logger.info(f"🚀 تم الشراء بنجاح بسعر أساسي: {self.entry_price}")
-                    else:
-                        logger.info("💤 السوق غير مستقر أو الاتجاه هابط، البوت يحافظ على الكاش بأمان...")
-                else:
-                    logger.warning("⚠️ الرصيد المتاح غير كافٍ للحد الأدنى للصفقة.")
-
-                await asyncio.sleep(self.poll_interval)
-
-            except ccxt.NetworkError as e:
-                logger.warning(f"مشكلة اتصال مؤقتة بالشبكة مع OKX: {e}")
-                await asyncio.sleep(20)
-            except ccxt.ExchangeError as e:
-                logger.warning(f"خطأ من منصة OKX API: {e}")
-                await asyncio.sleep(30)
-            except Exception as e:
-                logger.error(f"خطأ غير متوقع في محرك التداول: {e}")
-                await asyncio.sleep(30)
-
-    async def main(self):
-        if not self.api_key or not self.api_secret or not self.passphrase:
-            logger.critical("مفاتيح OKX أو كلمة المرور مفقودة في متغيرات البيئة!")
-            return
-
-        logger.info("جاري الاتصال بمنصة OKX لتشغيل النسخة المطورة...")
-        exchange = ccxt.okx({
-            'apiKey': self.api_key,
-            'secret': self.api_secret,
-            'password': self.passphrase,
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'spot'
-            }
-        })
-
-        try:
-            await exchange.load_markets()
-            logger.info("تم التحقق من الاتصال وبدء العمل بنجاح تام!")
-            try:
-                await self.run_protected_strategy(exchange)
-            finally:
-                await exchange.close()
-        except ccxt.AuthenticationError as e:
-            logger.critical(f"❌ خطأ في المصادقة مع OKX: {e}")
-        except Exception as e:
-            logger.critical(f"خطأ حرج: {e}")
-
-if __name__ == "__main__":
+def get_balance(currency='USDT'):
     try:
-        asyncio.run(MaxProtectionTradingBotOKX().main())
-    except KeyboardInterrupt:
-        logger.info("تم إيقاف النظام يدويًا.")
+        balance = safe_api_call(exchange.fetch_balance)
+        return float(balance['free'].get(currency, 0))
+    except Exception as e:
+        print(f"خطأ في جلب الرصيد: {e}")
+        return 0.0
+
+def get_market_price(symbol):
+    try:
+        ticker = safe_api_call(exchange.fetch_ticker, symbol)
+        return float(ticker['last'])
+    except Exception as e:
+        print(f"خطأ في جلب سعر {symbol}: {e}")
+        return None
+
+def institutional_market_analysis(symbol):
+    """
+    تحليل مؤسسي متكامل: تصفية جدران التلاعب (Spoofing)، 
+    توافق الأطر الزمنية المتعددة (15m + 1h)، والأهداف الديناميكية (ATR)
+    """
+    try:
+        # 1. كشف التلاعب في دفتر الأوامر والتأكد من السيولة الحقيقية
+        order_book = safe_api_call(exchange.fetch_order_book, symbol, limit=50)
+        bids = order_book['bids']
+        asks = order_book['asks']
         
+        bids_top_vol = sum([b[1] for b in bids[:15]])
+        asks_top_vol = sum([a[1] for a in asks[:15]])
+        
+        if asks_top_vol > 0 and (bids_top_vol / asks_top_vol) < 1.2:
+            return None, None, None, None
+
+        # 2. فحص الترند على إطار الساعة (1h)
+        ohlcv_1h = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='1h', limit=30)
+        closes_1h = [c[4] for c in ohlcv_1h]
+        ema_1h = sum(closes_1h) / len(closes_1h)
+        if closes_1h[-1] < ema_1h:
+            return None, None, None, None
+
+        # 3. فحص إطار الـ 15 دقيقة ومؤشر ATR للحسابات الديناميكية
+        ohlcv_15m = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='15m', limit=50)
+        if not ohlcv_15m or len(ohlcv_15m) < 50:
+            return None, None, None, None
+
+        closes_15m = [c[4] for c in ohlcv_15m]
+        ema_15m = sum(closes_15m) / len(closes_15m)
+        current_price = closes_15m[-1]
+
+        if current_price < ema_15m:
+            return None, None, None, None
+
+        # قياس التقلب الحقيقي (ATR)
+        highs = [c[2] for c in ohlcv_15m[-14:]]
+        lows = [c[3] for c in ohlcv_15m[-14:]]
+        tr_list = [highs[i] - lows[i] for i in range(len(highs))]
+        avg_atr = sum(tr_list) / len(tr_list)
+        
+        volatility_ratio = avg_atr / current_price
+        if volatility_ratio < 0.0005:
+            return None, None, None, None
+
+        # حساب الأهداف الديناميكية
+        dynamic_tp_pct = max(0.008, min(0.015, volatility_ratio * 1.5))
+        dynamic_sl_pct = 0.0025
+
+        # حساب معيار الحجم المتكيف (Adaptive Kelly-inspired sizing factor)
+        strength_score = min(1.0, (bids_top_vol / (asks_top_vol + 1e-8)) / 2.0)
+
+        return True, dynamic_tp_pct, dynamic_sl_pct, strength_score
+
+    except Exception as e:
+        print(f"خطأ في التحليل المؤسسي لـ {symbol}: {e}")
+        return None, None, None, None
+
+def place_order(symbol, amount_usd, price):
+    try:
+        amount = amount_usd / price
+        market = safe_api_call(exchange.load_markets)
+        precision = market[symbol]['precision']['amount']
+        if isinstance(precision, float) or (isinstance(precision, int) and precision < 1):
+            amount = round(amount, 6)
+        else:
+            amount = math.floor(amount * (10 ** precision)) / (10 ** precision)
+
+        print(f"تنفيذ صفقة مؤسسية لـ {symbol} بقيمة {amount_usd:.2f}$ (الكمية: {amount}) بسعر {price}")
+        order = safe_api_call(exchange.create_market_buy_order, symbol, amount)
+        return order
+    except Exception as e:
+        print(f"فشل تنفيذ أمر الشراء على {symbol}: {e}")
+        return None
+
+def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, target_sl_pct):
+    """مراقبة ذكية متكاملة مع التعافي (DCA) وتتبع الأرباح الديناميكي (Trailing)"""
+    current_entry_price = initial_entry_price
+    total_amount = initial_amount
+    total_cost = initial_entry_price * initial_amount
+    
+    dca_used = False
+    highest_price = initial_entry_price
+    trailing_active = False
+
+    print(f"بدء المراقبة المؤسسية لـ {symbol} | الدخول: {initial_entry_price} | الهدف المستهدف: {target_tp_pct*100:.2f}%")
+
+    while True:
+        try:
+            current_price = get_market_price(symbol)
+            if not current_price:
+                time.sleep(5)
+                continue
+
+            tp_price = current_entry_price * (1 + target_tp_pct)
+            sl_price = current_entry_price * (1 - target_sl_pct)
+
+            # 1. نظام التعافي الذكي (Smart DCA)
+            if not dca_used and current_price <= (current_entry_price * (1 - DCA_THRESHOLD_PCT)):
+                print(f"رصد تراجع مؤقت آمن لـ {symbol}. تفعيل تعافي متوسط التكلفة (DCA)...")
+                balance_usdt = get_balance('USDT')
+                dca_amount_usd = min(balance_usdt * 0.4, 30.0)
+                
+                if dca_amount_usd >= 10.0:
+                    dca_order = place_order(symbol, dca_amount_usd, current_price)
+                    if dca_order:
+                        dca_filled_price = float(dca_order.get('average', current_price) or current_price)
+                        dca_filled_amount = float(dca_order.get('filled', 0))
+                        
+                        total_cost += (dca_filled_price * dca_filled_amount)
+                        total_amount += dca_filled_amount
+                        current_entry_price = total_cost / total_amount
+                        dca_used = True
+                        print(f"تم تعديل متوسط السعر بنجاح وأصبح: {current_entry_price}")
+
+            # 2. وقف الخسارة
+            if current_price <= sl_price:
+                print(f"تنبيه: وصل السعر لـ {sl_price} -> تفعيل وقف الخسارة لحماية رأس المال.")
+                safe_api_call(exchange.create_market_sell_order, symbol, total_amount)
+                break
+
+            # 3. تتبع الأرباح الديناميكي (Trailing Take Profit)
+            if current_price > highest_price:
+                highest_price = current_price
+
+            if not trailing_active and current_price >= tp_price:
+                trailing_active = True
+                print(f"تم بلوغ الهدف! تفعيل ملاحقة الأرباح الإضافية. أعلى سعر: {highest_price}")
+
+            if trailing_active:
+                drop_threshold = highest_price * (1 - TRAILING_DROP_PCT)
+                if current_price <= drop_threshold:
+                    print(f"ارتداد السعر من القمة -> جاري بيع {symbol} لجني الأرباح القصوى!")
+                    safe_api_call(exchange.create_market_sell_order, symbol, total_amount)
+                    break
+
+            time.sleep(10)
+        except Exception as e:
+            print(f"خطأ أثناء مراقبة الصفقة: {e}")
+            time.sleep(5)
+
+def run_bot():
+    print("=== تشغيل البوت المؤسسي الأسطوري: قراءة المتغيرات آلياً + حماية ضد التلاعب + تعافي ذكي ===")
+    
+    while True:
+        try:
+            usdt_balance = get_balance('USDT')
+            print(f"رصيد USDT المتاح: {usdt_balance}$")
+
+            for symbol in SYMBOLS:
+                is_valid, dyn_tp, dyn_sl, strength_score = institutional_market_analysis(symbol)
+                
+                if not is_valid:
+                    print(f"شروط السوق لـ {symbol} لا تلبي المعايير المؤسسية الصارمة حالياً. التخطي.")
+                    continue
+
+                adaptive_trade_amount = usdt_balance * BASE_MAX_ALLOCATION_PCT * strength_score
+
+                if adaptive_trade_amount >= 10.0:
+                    current_price = get_market_price(symbol)
+                    if not current_price:
+                        continue
+
+                    print(f"توافق مؤسسي تام لـ {symbol} (معامل القوة: {strength_score:.2f}). تنفيذ الصفقة...")
+                    order = place_order(symbol, adaptive_trade_amount, current_price)
+
+                    if order:
+                        filled_price = float(order.get('average', current_price) or current_price)
+                        filled_amount = float(order.get('filled', 0))
+
+                        monitor_trade(symbol, filled_price, filled_amount, dyn_tp, dyn_sl)
+                        break
+                else:
+                    print(f"الرصيد أو معامل القوة لـ {symbol} لا يسمح بفتح صفقة آمنة حالياً.")
+
+            time.sleep(30)
+        except Exception as e:
+            print(f"خطأ رئيسي في الحلقة الرئيسية: {e}")
+            time.sleep(10)
+
+if __name__ == '__main__':
+    run_bot()
+    
