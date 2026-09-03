@@ -1,166 +1,122 @@
 import os
-import asyncio
+import time
 import logging
-from binance import AsyncClient
-from binance.exceptions import BinanceAPIException, BinanceRequestException
+import requests
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
-# إعداد السجلات الهندسية لتوثيق وتتبع كل جزء من رأس المال بدقة فائقة
+# إعداد السجلات لمتابعة حالة البوت بدقة
 logging.basicConfig(
-    format='%(asctime)s | [MAX-PROTECTION-BOT] | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger("MaxProtectionTrader")
+logger = logging.getLogger(__name__)
 
-class MaxProtectionTradingBot:
-    def __init__(self):
-        self.api_key = os.getenv('BINANCE_API_KEY')
-        self.api_secret = os.getenv('BINANCE_SECRET_KEY')
-        self.symbol = 'BTCUSDT'
-        self.trade_amount_usdt = 11.0  # القيمة المتوافقة بدقة مع الحد الأدنى لباينانس
-        self.poll_interval = 20  # فترة الفحص المنتظم والمستقر
-        
-        # حماية صارمة وصارمة جداً لرأس المال لتجنب أي خسارة كبرى
-        self.in_position = False
-        self.entry_price = 0.0
-        self.take_profit_target = 0.015  # ربح مستهدف آمن ومدروس (1.5%)
-        self.stop_loss_limit = 0.004     # وقف خسارة حاد وصارم للغاية (0.4%) لحماية الكاش تماماً
+# جلب المفاتيح والإعدادات بأمان من متغيرات البيئة في Railway
+TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
+# معرف الدردشة الخاص بك لضمان وصول رسائل التداول لك وحدك
+MY_CHAT_ID = "5721549115"
 
-    async def get_available_balance(self, client: AsyncClient):
-        """فحص رصيد الـ USDT المتاح للتداول الفوري بأمان تام"""
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
+
+# إعداد عميل باينانس (تداول حقيقي)
+client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+
+def send_telegram_message(message):
+    """إرسال إشعار فوري إلى حسابك الشخصي على تلجرام"""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("Telegram BOT_TOKEN is missing!")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": MY_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            logger.error(f"Failed to send telegram message: {response.text}")
+    except Exception as e:
+        logger.error(f"Error sending telegram message: {e}")
+
+def check_market_and_trade():
+    """حلقة مراقبة السوق وتنفيذ الصفقات بأمان بناءً على استراتيجية الـ RSI"""
+    symbol = "BTCUSDT"
+    target_usdt_amount = 11.0  # الالتزام بالحد الأدنى للصفقة على باينانس
+    
+    logger.info("Starting Binance market monitoring loop...")
+    send_telegram_message("🚀 *تم تفعيل بوت التداول بنجاح!*\nالبوت يعمل الآن في الخلفية ويراقب السوق من أجلك.")
+
+    while True:
         try:
-            account = await client.get_account()
-            for asset in account['balances']:
-                if asset['asset'] == 'USDT':
-                    return float(asset['free'])
-            return 0.0
-        except Exception as e:
-            logger.error(f"خطأ في قراءة الرصيد الفوري: {e}")
-            return 0.0
-
-    def calculate_rsi(self, closes, period=14):
-        """حساب مؤشر القوة النسبية RSI بدقة هندسية عالية"""
-        if len(closes) < period + 1:
-            return 50.0
-        
-        gains, losses = [], []
-        for i in range(1, len(closes)):
-            change = closes[i] - closes[i - 1]
-            if change > 0:
-                gains.append(change)
-                losses.append(0)
-            else:
-                gains.append(0)
-                losses.append(abs(change))
-                
-        avg_gain = sum(gains[-period:]) / period
-        avg_loss = sum(losses[-period:]) / period
-        
-        if avg_loss == 0:
-            return 100.0
+            # جلب أسعار الإغلاق التاريخية لحساب مؤشر الـ RSI
+            klines = client.get_klines(symbol=symbol, interval=Client.KLINE_INTERVAL_1HOUR, limit=50)
+            closes = [float(entry[4]) for entry in klines]
             
-        rs = avg_gain / avg_loss
-        return 100 - (100 / (1 + rs))
-
-    async def run_protected_strategy(self, client: AsyncClient):
-        logger.info("تم تفعيل النسخة القصوى لحماية الأصول الفورية وإدارة المخاطر بحذر شديد...")
-
-        while True:
-            try:
-                # طباعة إقرار دوري في السجلات لتتأكد عيناك أن بوت باينانس يراقب السوق لحظة بلحظة
-                logger.info("🔍 [Binance-Scanner] جاري فحص السوق وحركة الأسعار والمؤشرات الآن...")
-
-                # 1. جلب السعر الحالي
-                ticker = await client.get_symbol_ticker(symbol=self.symbol)
-                current_price = float(ticker['price'])
-
-                # 2. فحص الرصيد المتوفر
-                balance = await self.get_available_balance(client)
-
-                # 3. جلب الشمعات السعرية لحساب المؤشرات بدقة متناهية
-                klines = await client.get_klines(symbol=self.symbol, interval=AsyncClient.KLINE_INTERVAL_1MINUTE, limit=40)
-                closes = [float(entry[4]) for entry in klines]
-                rsi = self.calculate_rsi(closes)
-                
-                # حساب المتوسط المتحرك البسيط قصير المدى لفلترة الاتجاه
-                sma_20 = sum(closes[-20:]) / 20
-
-                logger.info(f"📊 [حالة السوق] السعر: {current_price} | المتوسط (SMA20): {sma_20:.2f} | RSI: {rsi:.2f} | الرصيد المتاح: {balance:.2f} USDT")
-
-                # 4. إدارة الصفقة المفتوحة وحمايتها لحظياً من أي تراجع
-                if self.in_position:
-                    price_diff = (current_price - self.entry_price) / self.entry_price
-                    logger.info(f"مراقبة صفقة نشطة. نسبة التغير الحالية: {price_diff * 100:.2f}%")
-
-                    # جني الأرباح الآلي
-                    if price_diff >= self.take_profit_target:
-                        logger.info("🎯 هدف الربح تحقق بنجاح! جاري إرسال أمر بيع فوري لجني الأرباح...")
-                        await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_SELL,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quantity=round(self.trade_amount_usdt / current_price, 5)
-                        )
-                        self.in_position = False
-                        logger.info("تم إغلاق الصفقة وتأمين الأرباح بنجاح.")
-
-                    # وقف الخسارة الفوري للحفاظ على رأس المال من أي هبوط
-                    elif price_diff <= -self.stop_loss_limit:
-                        logger.warning("🛡️ تنبيه حماية رأس المال: تراجع السعر بنسبة وقف الخسارة، جاري التخارج الفوري لحماية المبلغ...")
-                        await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_SELL,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quantity=round(self.trade_amount_usdt / current_price, 5)
-                        )
-                        self.in_position = False
-                        logger.warning("تم إغلاق الصفقة لحماية الرصيد الأساسي بالكامل.")
-
-                # 5. شروط الدخول الحذرة والآمنة للغاية (تجنب الخسارة العشوائية)
-                elif not self.in_position and balance >= self.trade_amount_usdt:
-                    # شرط مزدوج صارم جداً: تشبع بيعي قوي جداً (RSI < 28) + السعر قارب على الاستقرار فوق المتوسط
-                    if rsi < 28.0 and current_price >= (sma_20 * 0.997):
-                        logger.info(f"🔥 فرصة استثنائية مؤكدة (RSI: {rsi:.2f}). جاري تنفيذ أمر شراء فوري بأعلى معايير الأمان...")
-                        order = await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_BUY,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quoteOrderQty=self.trade_amount_usdt
-                        )
-                        self.entry_price = current_price
-                        self.in_position = True
-                        logger.info(f"تم تنفيذ الشراء بنجاح عند سعر أساسي: {self.entry_price}")
-                    else:
-                        logger.info("💤 السوق لا يوفر فرصة آمنة 100% الآن، البوت يفضل الاحتفاظ بالكاش وعدم المخاطرة...")
+            # حساب مبسط لمؤشر القوة النسبية RSI (14 فترة)
+            gains = []
+            losses = []
+            for i in range(1, len(closes)):
+                diff = closes[i] - closes[i-1]
+                if diff >= 0:
+                    gains.append(diff)
+                    losses.append(0)
                 else:
-                    logger.warning("⚠️ الرصيد المتاح لا يغطي الحد الأدنى للصفقة الآمنة حالياً.")
+                    gains.append(0)
+                    losses.append(abs(diff))
+            
+            avg_gain = sum(gains[-14:]) / 14
+            avg_loss = sum(losses[-14:]) / 14
+            
+            if avg_loss == 0:
+                rsi = 100
+            else:
+                rs = avg_gain / avg_loss
+                rsi = 100 - (100 / (1 + rs))
+            
+            current_price = closes[-1]
+            logger.info(f"Checked {symbol} - Current Price: {current_price} | RSI: {rsi:.2f}")
 
-                await asyncio.sleep(self.poll_interval)
-
-            except BinanceAPIException as e:
-                logger.warning(f"خطأ مؤقت من منصة باينانس API: {e.message}")
-                await asyncio.sleep(30)
-            except BinanceRequestException as e:
-                logger.warning(f"مشكلة اتصال مؤقتة بالشبكة: {e}")
-                await asyncio.sleep(20)
-            except Exception as e:
-                logger.error(f"خطأ غير متوقع في محرك التداول الآمن: {e}")
-                await asyncio.sleep(30)
-
-    async def main(self):
-        if not self.api_key or not self.api_secret:
-            logger.critical("مفاتيح باينانس مفقودة تماماً في متغيرات البيئة!")
-            return
-
-        client = await AsyncClient.create(self.api_key, self.api_secret)
-        try:
-            await self.run_protected_strategy(client)
-        finally:
-            await client.close_connection()
+            # شرط الدخول في صفقة شراء (إذا هبط المؤشر تحت 28 ووجدت الفرصة آمنة)
+            if rsi < 28:
+                # التحقق من رصيد الـ USDT المتاح في المحفظة الفورية
+                account = client.get_account()
+                usdt_balance = 0.0
+                for balance in account['balances']:
+                    if balance['asset'] == 'USDT':
+                        usdt_balance = float(balance['free'])
+                        break
+                
+                logger.info(f"RSI is low ({rsi:.2f}). Checking USDT balance: {usdt_balance}")
+                
+                if usdt_balance >= target_usdt_amount:
+                    # تنفيذ أمر الشراء الفوري (Market Buy)
+                    order = client.order_market_buy(
+                        symbol=symbol,
+                        quoteOrderQty=target_usdt_amount
+                    )
+                    success_msg = (
+                        f"🎯 *تم تنفيذ صفقة شراء بنجاح!*\n"
+                        f"• العملة: {symbol}\n"
+                        f"• القيمة: {target_usdt_amount} USDT\n"
+                        f"• مؤشر RSI: {rsi:.2f}\n"
+                        f"• السعر الحالي: {current_price}"
+                    )
+                    logger.info(success_msg)
+                    send_telegram_message(success_msg)
+                else:
+                    logger.warning(f"RSI condition met, but insufficient USDT balance: {usdt_balance}")
+            
+        except BinanceAPIException as e:
+            logger.error(f"Binance API error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in trading loop: {e}")
+        
+        # الانتظار لمدة 15 دقيقة قبل إعادة فحص السوق لتوفير الموارد
+        time.sleep(900)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(MaxProtectionTradingBot().main())
-    except KeyboardInterrupt:
-        logger.info("تم إيقاف النظام الهندسي الآمن يدويًا.")
-        
+    check_market_and_trade()
+    
