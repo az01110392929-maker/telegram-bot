@@ -13,36 +13,18 @@ logger = logging.getLogger(__name__)
 
 # توكن بوت التداول الجديد الخاص بك
 TELEGRAM_BOT_TOKEN = "8878316487:AAFDepJN7aESM1kVjB43JmxJdSi1NrwUbYE"
+# معرف الدردشة الشخصي الخاص بك (مباشر وبدون تعقيد)
+MY_CHAT_ID = "5721549115"
 
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
 client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
 
-def get_latest_chat_id():
-    """جلب معرف الدردشة تلقائياً من آخر شخص تفاعل مع البوت"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-    try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        if data.get("ok") and data.get("result"):
-            # البحث عن أحدث رسالة قمت بإرسالها للبوت
-            for update in reversed(data["result"]):
-                if "message" in update:
-                    return update["message"]["chat"]["id"]
-    except Exception as e:
-        logger.error(f"Error fetching chat id: {e}")
-    return None
-
 def send_telegram_message(message):
-    chat_id = get_latest_chat_id()
-    if not chat_id:
-        logger.warning("No chat_id found! Please send a message to the bot on Telegram first.")
-        return
-        
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
-        "chat_id": chat_id,
+        "chat_id": MY_CHAT_ID,
         "text": message,
         "parse_mode": "Markdown"
     }
@@ -60,7 +42,7 @@ def check_market_and_trade():
     target_usdt_amount = 11.0
     
     logger.info("Starting Binance market monitoring loop...")
-    # محاولة إرسال رسالة ترحيبية أول ما يشتغل البوت
+    # إرسال رسالة ترحيبية فورية إلى رقمك لتتأكد بنفسك أن البوت اشتغل
     send_telegram_message("🚀 *تم تفعيل بوت التداول بنجاح!\nالبوت يعمل الآن ويراقب السوق من أجلك.*")
 
     while True:
