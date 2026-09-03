@@ -1,41 +1,41 @@
 import os
 import asyncio
 import logging
-from binance import AsyncClient
-from binance.exceptions import BinanceAPIException, BinanceRequestException
+import ccxt.async_support as ccxt
 
 # إعداد السجلات الهندسية لتوثيق وتتبع كل جزء من رأس المال بدقة فائقة
 logging.basicConfig(
-    format='%(asctime)s | [MAX-PROTECTION-BOT] | %(levelname)s | %(message)s',
+    format='%(asctime)s | [OKX-PROTECTION-BOT] | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     level=logging.INFO
 )
-logger = logging.getLogger("MaxProtectionTrader")
+logger = logging.getLogger("MaxProtectionTraderOKX")
 
-class MaxProtectionTradingBot:
+class MaxProtectionTradingBotOKX:
     def __init__(self):
-        self.api_key = os.getenv('BINANCE_API_KEY')
-        self.api_secret = os.getenv('BINANCE_SECRET_KEY')
-        self.symbol = 'BTCUSDT'
-        self.trade_amount_usdt = 11.0  # القيمة المتوافقة بدقة مع الحد الأدنى لباينانس
-        self.poll_interval = 20  # فترة الفحص المنتظم والمستقر
+        self.api_key = os.getenv('OKX_API_KEY')
+        self.api_secret = os.getenv('OKX_SECRET_KEY')
+        self.passphrase = os.getenv('OKX_PASSPHRASE')
         
-        # حماية صارمة وصارمة جداً لرأس المال لتجنب أي خسارة كبرى
+        # رموز التداول في OKX تكون عادة بصيغة BTC/USDT:USDT (للعقود أو الفوري حسب الإعداد)
+        self.symbol = 'BTC/USDT'
+        self.trade_amount_usdt = 11.0  # قيمة الصفقة
+        self.poll_interval = 20  # فترة الفحص المنتظم
+        
+        # حماية صارمة لرأس المال
         self.in_position = False
         self.entry_price = 0.0
-        self.take_profit_target = 0.015  # ربح مستهدف آمن ومدروس (1.5%)
-        self.stop_loss_limit = 0.004     # وقف خسارة حاد وصارم للغاية (0.4%) لحماية الكاش تماماً
+        self.take_profit_target = 0.015  # 1.5% ربح
+        self.stop_loss_limit = 0.004     # 0.4% وقف خسارة
 
-    async def get_available_balance(self, client: AsyncClient):
-        """فحص رصيد الـ USDT المتاح للتداول الفوري بأمان تام"""
+    async def get_available_balance(self, exchange: ccxt.okx):
+        """فحص رصيد الـ USDT المتاح للتداول بأمان تام"""
         try:
-            account = await client.get_account()
-            for asset in account['balances']:
-                if asset['asset'] == 'USDT':
-                    return float(asset['free'])
-            return 0.0
+            balance = await exchange.fetch_balance()
+            free_usdt = balance['USDT']['free'] if 'USDT' in balance and 'free' in balance['USDT'] else 0.0
+            return float(free_usdt)
         except Exception as e:
-            logger.error(f"خطأ في قراءة الرصيد الفوري: {e}")
+            logger.error(f"خطأ في قراءة الرصيد الفوري من OKX: {e}")
             return 0.0
 
     def calculate_rsi(self, closes, period=14):
@@ -62,32 +62,31 @@ class MaxProtectionTradingBot:
         rs = avg_gain / avg_loss
         return 100 - (100 / (1 + rs))
 
-    async def run_protected_strategy(self, client: AsyncClient):
-        logger.info("تم تفعيل النسخة القصوى لحماية الأصول الفورية وإدارة المخاطر بحذر شديد...")
+    async def run_protected_strategy(self, exchange: ccxt.okx):
+        logger.info("تم تفعيل النسخة القصوى لحماية الأصول وإدارة المخاطر على OKX بحذر شديد...")
 
         while True:
             try:
-                # طباعة إقرار دوري في السجلات لتتأكد عيناك أن بوت باينانس يراقب السوق لحظة بلحظة
-                logger.info("🔍 [Binance-Scanner] جاري فحص السوق وحركة الأسعار والمؤشرات الآن...")
+                logger.info("🔍 [OKX-Scanner] جاري فحص السوق وحركة الأسعار والمؤشرات الآن...")
 
                 # 1. جلب السعر الحالي
-                ticker = await client.get_symbol_ticker(symbol=self.symbol)
-                current_price = float(ticker['price'])
+                ticker = await exchange.fetch_ticker(self.symbol)
+                current_price = float(ticker['last'])
 
                 # 2. فحص الرصيد المتوفر
-                balance = await self.get_available_balance(client)
+                balance = await self.get_available_balance(exchange)
 
-                # 3. جلب الشمعات السعرية لحساب المؤشرات بدقة متناهية
-                klines = await client.get_klines(symbol=self.symbol, interval=AsyncClient.KLINE_INTERVAL_1MINUTE, limit=40)
-                closes = [float(entry[4]) for entry in klines]
+                # 3. جلب الشمعات السعرية (1 دقيقة)
+                ohlcv = await exchange.fetch_ohlcv(self.symbol, timeframe='1m', limit=40)
+                closes = [float(entry[4]) for entry in ohlcv]
                 rsi = self.calculate_rsi(closes)
                 
-                # حساب المتوسط المتحرك البسيط قصير المدى لفلترة الاتجاه
+                # حساب المتوسط المتحرك البسيط قصير المدى
                 sma_20 = sum(closes[-20:]) / 20
 
                 logger.info(f"📊 [حالة السوق] السعر: {current_price} | المتوسط (SMA20): {sma_20:.2f} | RSI: {rsi:.2f} | الرصيد المتاح: {balance:.2f} USDT")
 
-                # 4. إدارة الصفقة المفتوحة وحمايتها لحظياً من أي تراجع
+                # 4. إدارة الصفقة المفتوحة وحمايتها لحظياً
                 if self.in_position:
                     price_diff = (current_price - self.entry_price) / self.entry_price
                     logger.info(f"مراقبة صفقة نشطة. نسبة التغير الحالية: {price_diff * 100:.2f}%")
@@ -95,82 +94,79 @@ class MaxProtectionTradingBot:
                     # جني الأرباح الآلي
                     if price_diff >= self.take_profit_target:
                         logger.info("🎯 هدف الربح تحقق بنجاح! جاري إرسال أمر بيع فوري لجني الأرباح...")
-                        await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_SELL,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quantity=round(self.trade_amount_usdt / current_price, 5)
-                        )
+                        amount_to_sell = self.trade_amount_usdt / current_price
+                        await exchange.create_market_sell_order(self.symbol, amount_to_sell)
                         self.in_position = False
                         logger.info("تم إغلاق الصفقة وتأمين الأرباح بنجاح.")
 
-                    # وقف الخسارة الفوري للحفاظ على رأس المال من أي هبوط
+                    # وقف الخسارة الفوري
                     elif price_diff <= -self.stop_loss_limit:
-                        logger.warning("🛡️ تنبيه حماية رأس المال: تراجع السعر بنسبة وقف الخسارة، جاري التخارج الفوري لحماية المبلغ...")
-                        await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_SELL,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quantity=round(self.trade_amount_usdt / current_price, 5)
-                        )
+                        logger.warning("🛡️ تنبيه حماية رأس المال: تراجع السعر بنسبة وقف الخسارة، جاري التخارج الفوري...")
+                        amount_to_sell = self.trade_amount_usdt / current_price
+                        await exchange.create_market_sell_order(self.symbol, amount_to_sell)
                         self.in_position = False
                         logger.warning("تم إغلاق الصفقة لحماية الرصيد الأساسي بالكامل.")
 
-                # 5. شروط الدخول الحذرة والآمنة للغاية (تجنب الخسارة العشوائية)
+                # 5. شروط الدخول الحذرة والآمنة
                 elif not self.in_position and balance >= self.trade_amount_usdt:
-                    # شرط مزدوج صارم جداً: تشبع بيعي قوي جداً (RSI < 28) + السعر قارب على الاستقرار فوق المتوسط
                     if rsi < 28.0 and current_price >= (sma_20 * 0.997):
-                        logger.info(f"🔥 فرصة استثنائية مؤكدة (RSI: {rsi:.2f}). جاري تنفيذ أمر شراء فوري بأعلى معايير الأمان...")
-                        order = await client.create_order(
-                            symbol=self.symbol,
-                            side=AsyncClient.SIDE_BUY,
-                            type=AsyncClient.ORDER_TYPE_MARKET,
-                            quoteOrderQty=self.trade_amount_usdt
-                        )
+                        logger.info(f"🔥 فرصة استثنائية مؤكدة (RSI: {rsi:.2f}). جاري تنفيذ أمر شراء فوري...")
+                        # حساب الكمية المطلوبة بالعملة الأساسية بناءً على مبلغ الـ USDT
+                        amount_to_buy = self.trade_amount_usdt / current_price
+                        await exchange.create_market_buy_order(self.symbol, amount_to_buy)
                         self.entry_price = current_price
                         self.in_position = True
                         logger.info(f"تم تنفيذ الشراء بنجاح عند سعر أساسي: {self.entry_price}")
                     else:
-                        logger.info("💤 السوق لا يوفر فرصة آمنة 100% الآن، البوت يفضل الاحتفاظ بالكاش وعدم المخاطرة...")
+                        logger.info("💤 السوق لا يوفر فرصة آمنة 100% الآن، البوت يفضل الاحتفاظ بالكاش...")
                 else:
                     logger.warning("⚠️ الرصيد المتاح لا يغطي الحد الأدنى للصفقة الآمنة حالياً.")
 
                 await asyncio.sleep(self.poll_interval)
 
-            except BinanceAPIException as e:
-                logger.warning(f"خطأ مؤقت من منصة باينانس API: {e.message} (Code: {e.code})")
-                await asyncio.sleep(30)
-            except BinanceRequestException as e:
-                logger.warning(f"مشكلة اتصال مؤقتة بالشبكة: {e}")
+            except ccxt.NetworkError as e:
+                logger.warning(f"مشكلة اتصال مؤقتة بالشبكة مع OKX: {e}")
                 await asyncio.sleep(20)
+            except ccxt.ExchangeError as e:
+                logger.warning(f"خطأ من منصة OKX API: {e}")
+                await asyncio.sleep(30)
             except Exception as e:
                 logger.error(f"خطأ غير متوقع في محرك التداول الآمن: {e}")
                 await asyncio.sleep(30)
 
     async def main(self):
-        if not self.api_key or not self.api_secret:
-            logger.critical("مفاتيح باينانس مفقودة تماماً في متغيرات البيئة!")
+        if not self.api_key or not self.api_secret or not self.passphrase:
+            logger.critical("مفاتيح OKX أو كلمة المرور (Passphrase) مفقودة تماماً في متغيرات البيئة!")
             return
 
-        logger.info("جاري تهيئة الاتصال بمنصة باينانس...")
+        logger.info("جاري تهيئة الاتصال بمنصة OKX...")
+        exchange = ccxt.okx({
+            'apiKey': self.api_key,
+            'secret': self.api_secret,
+            'password': self.passphrase,
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': 'spot'  # التحديد على التداول الفوري (Spot)
+            }
+        })
+
         try:
-            client = await AsyncClient.create(self.api_key, self.api_secret)
-            # فحص فوري للاتصال والصلاحيات للتأكد من تخطي خطأ الـ API Keys
-            await client.get_account()
-            logger.info("تم التحقق من مفاتيح باينانس والاتصال بنجاح تام!")
+            # التحقق من الاتصال وصلاحيات الحساب
+            await exchange.load_markets()
+            logger.info("تم التحقق من مفاتيح OKX والاتصال بنجاح تام!")
             try:
-                await self.run_protected_strategy(client)
+                await self.run_protected_strategy(exchange)
             finally:
-                await client.close_connection()
-        except BinanceAPIException as e:
-            logger.critical(f"❌ رفضت باينانس المفاتيح (خطأ رقم {e.code}): {e.message}")
-            logger.critical("تأكد تماماً من نسخ مفتاح الـ API ومفتاح الـ Secret بدون مسافات، وأن مفتاحك ليس محظوراً أو مقيداً بـ IP معين.")
+                await exchange.close()
+        except ccxt.AuthenticationError as e:
+            logger.critical(f"❌ رفضت OKX المفاتيح أو كلمة المرور: {e}")
+            logger.critical("تأكد من صحة الـ API Key والـ Secret Key وعبارة المرور (Passphrase) ومن عدم وجود مسافات.")
         except Exception as e:
-            logger.critical(f"خطأ حرج في تهيئة العميل: {e}")
+            logger.critical(f"خطأ حرج في تهيئة العميل مع OKX: {e}")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(MaxProtectionTradingBot().main())
+        asyncio.run(MaxProtectionTradingBotOKX().main())
     except KeyboardInterrupt:
         logger.info("تم إيقاف النظام الهندسي الآمن يدويًا.")
         
