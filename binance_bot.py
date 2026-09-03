@@ -12,11 +12,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# جلب المفاتيح والإعدادات بأمان من متغيرات البيئة في Railway
-TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
-# معرف الدردشة الخاص بك لضمان وصول رسائل التداول لك وحدك
+# توكن بوت التداول الجديد الخاص بك وحدك (مكتوب مباشرة للأمان وعدم اللخبطة)
+TELEGRAM_BOT_TOKEN = "8878316487:AAFDepJN7aESM1kVjB43JmxJdSi1NrwUbYE"
+# معرف الدردشة الشخصي الخاص بك
 MY_CHAT_ID = "5721549115"
 
+# جلب مفاتيح باينانس فقط من متغيرات البيئة الأساسية
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
