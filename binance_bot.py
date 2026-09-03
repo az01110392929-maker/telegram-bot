@@ -5,33 +5,44 @@ import requests
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
-# إعداد السجلات لمتابعة حالة البوت بدقة
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# توكن بوت التداول الجديد الخاص بك وحدك (مكتوب مباشرة للأمان وعدم اللخبطة)
+# توكن بوت التداول الجديد الخاص بك
 TELEGRAM_BOT_TOKEN = "8878316487:AAFDepJN7aESM1kVjB43JmxJdSi1NrwUbYE"
-# معرف الدردشة الشخصي الخاص بك
-MY_CHAT_ID = "5721549115"
 
-# جلب مفاتيح باينانس فقط من متغيرات البيئة الأساسية
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
-# إعداد عميل باينانس (تداول حقيقي)
 client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
 
+def get_latest_chat_id():
+    """جلب معرف الدردشة تلقائياً من آخر شخص تفاعل مع البوت"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        if data.get("ok") and data.get("result"):
+            # البحث عن أحدث رسالة قمت بإرسالها للبوت
+            for update in reversed(data["result"]):
+                if "message" in update:
+                    return update["message"]["chat"]["id"]
+    except Exception as e:
+        logger.error(f"Error fetching chat id: {e}")
+    return None
+
 def send_telegram_message(message):
-    """إرسال إشعار فوري إلى حسابك الشخصي على تلجرام"""
-    if not TELEGRAM_BOT_TOKEN:
-        logger.error("Telegram BOT_TOKEN is missing!")
+    chat_id = get_latest_chat_id()
+    if not chat_id:
+        logger.warning("No chat_id found! Please send a message to the bot on Telegram first.")
         return
+        
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
-        "chat_id": MY_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
         "parse_mode": "Markdown"
     }
@@ -39,24 +50,24 @@ def send_telegram_message(message):
         response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
             logger.error(f"Failed to send telegram message: {response.text}")
+        else:
+            logger.info("Telegram message sent successfully!")
     except Exception as e:
         logger.error(f"Error sending telegram message: {e}")
 
 def check_market_and_trade():
-    """حلقة مراقبة السوق وتنفيذ الصفقات بأمان بناءً على استراتيجية الـ RSI"""
     symbol = "BTCUSDT"
-    target_usdt_amount = 11.0  # الالتزام بالحد الأدنى للصفقة على باينانس
+    target_usdt_amount = 11.0
     
     logger.info("Starting Binance market monitoring loop...")
-    send_telegram_message("🚀 *تم تفعيل بوت التداول بنجاح!*\nالبوت يعمل الآن في الخلفية ويراقب السوق من أجلك.")
+    # محاولة إرسال رسالة ترحيبية أول ما يشتغل البوت
+    send_telegram_message("🚀 *تم تفعيل بوت التداول بنجاح!\nالبوت يعمل الآن ويراقب السوق من أجلك.*")
 
     while True:
         try:
-            # جلب أسعار الإغلاق التاريخية لحساب مؤشر الـ RSI
             klines = client.get_klines(symbol=symbol, interval=Client.KLINE_INTERVAL_1HOUR, limit=50)
             closes = [float(entry[4]) for entry in klines]
             
-            # حساب مبسط لمؤشر القوة النسبية RSI (14 فترة)
             gains = []
             losses = []
             for i in range(1, len(closes)):
@@ -80,9 +91,7 @@ def check_market_and_trade():
             current_price = closes[-1]
             logger.info(f"Checked {symbol} - Current Price: {current_price} | RSI: {rsi:.2f}")
 
-            # شرط الدخول في صفقة شراء (إذا هبط المؤشر تحت 28 ووجدت الفرصة آمنة)
             if rsi < 28:
-                # التحقق من رصيد الـ USDT المتاح في المحفظة الفورية
                 account = client.get_account()
                 usdt_balance = 0.0
                 for balance in account['balances']:
@@ -90,10 +99,7 @@ def check_market_and_trade():
                         usdt_balance = float(balance['free'])
                         break
                 
-                logger.info(f"RSI is low ({rsi:.2f}). Checking USDT balance: {usdt_balance}")
-                
                 if usdt_balance >= target_usdt_amount:
-                    # تنفيذ أمر الشراء الفوري (Market Buy)
                     order = client.order_market_buy(
                         symbol=symbol,
                         quoteOrderQty=target_usdt_amount
@@ -105,7 +111,6 @@ def check_market_and_trade():
                         f"• مؤشر RSI: {rsi:.2f}\n"
                         f"• السعر الحالي: {current_price}"
                     )
-                    logger.info(success_msg)
                     send_telegram_message(success_msg)
                 else:
                     logger.warning(f"RSI condition met, but insufficient USDT balance: {usdt_balance}")
@@ -115,9 +120,8 @@ def check_market_and_trade():
         except Exception as e:
             logger.error(f"Unexpected error in trading loop: {e}")
         
-        # الانتظار لمدة 15 دقيقة قبل إعادة فحص السوق لتوفير الموارد
         time.sleep(900)
 
 if __name__ == "__main__":
     check_market_and_trade()
-     
+    
