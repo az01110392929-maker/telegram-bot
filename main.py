@@ -1,26 +1,18 @@
 import ccxt
 import time
 import math
-import os
 import sys
 
-# البحث التلقائي الشامل عن المفاتيح في متغيرات البيئة بغض النظر عن أسماؤها
-api_key, secret_key, password = None, None, None
+# ضع بيانات الـ API الحقيقية وكلمة مرور الـ API (Passphrase) هنا بدقة
+API_KEY = 'ضع_مفتاح_الـ_API_هنا'
+SECRET_KEY = 'ضع_المفتاح_السري_هنا'
+PASSWORD = 'ضع_كلمة_مرور_الـ_API_هنا'
 
-for k, v in os.environ.items():
-    k_upper = k.upper()
-    if 'API' in k_upper and not api_key:
-        api_key = v
-    elif ('SECRET' in k_upper or 'SEC' in k_upper) and not secret_key:
-        secret_key = v
-    elif ('PASS' in k_upper or 'PAS' in k_upper) and not password:
-        password = v
-
-# إعدادات الاتصال الآمنة بمنصة OKX
+# إعدادات الاتصال المباشر والآمن بمنصة OKX
 exchange = ccxt.okx({
-    'apiKey': api_key,
-    'secret': secret_key,
-    'password': password,
+    'apiKey': API_KEY,
+    'secret': SECRET_KEY,
+    'password': PASSWORD,
     'enableRateLimit': True,
     'options': {'defaultType': 'spot'}
 })
@@ -186,7 +178,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت مع البحث التلقائي عن مفاتيح البيئة ===")
+    print("=== تشغيل البوت مع التثبيت اليدوي للبيانات ==Raise ===")
     
     while True:
         try:
