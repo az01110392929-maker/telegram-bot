@@ -38,7 +38,7 @@ class MultiAssetInstitutionalBot:
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        sign = mac.digest().hex()
+        sign = base64.b64encode(mac.digest()).decode('utf-8')
         return {
             "OK-ACCESS-KEY": API_KEY,
             "OK-ACCESS-SIGN": sign,
@@ -55,23 +55,18 @@ class MultiAssetInstitutionalBot:
             data = response.json()
             
             if data.get("code") == "0" and data.get("data"):
-                # قراءة إجمالي رأس المال الموحد (Total Equity) مباشرة
-                total_eq = float(data["data"][0].get("totalEq", 0))
-                if total_eq > 0:
-                    return total_eq
-                
                 details = data["data"][0].get("details", [])
                 for detail in details:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        eq = float(detail.get("eq", 0))
-                        val = max(avail, cash, eq)
-                        if val > 0:
-                            return val
+                        total_avail = avail if avail > 0 else cash
+                        if total_avail > 0:
+                            return total_avail
+            return 0.0
         except Exception as e:
-            print(f"[ERROR] Live balance fetch failed: {e}")
-        return 0.0
+            print(f"[ERROR] Balance fetch failed: {e}")
+            return 0.0
 
     def get_ticker_price(self, symbol):
         try:
@@ -220,7 +215,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالقراءة الحية المباشرة للحساب الموحد...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالطريقة الأصلية المعتمدة...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
