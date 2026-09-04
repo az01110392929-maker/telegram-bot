@@ -50,7 +50,6 @@ class InstitutionalBot:
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
             data = response.json()
             
-            # طباعة الرد كاملاً في اللوجات لنعرف السبب بدقة
             print(f"[DEBUG OKX RESPONSE] {data}")
             
             if data.get("code") == "0" and data.get("data"):
@@ -196,7 +195,7 @@ class InstitutionalBot:
                                     print(f"[ACTIVE SUCCESS] تم التأكيد والدخول بنجاح بسعر: {self.entry_price}")
                                     break
                             else:
-                                print("[TIMEOUT] لم يتم تنفيذ أمر الشراء, جاري إلغاؤه.")
+                                print("[TIMEOUT] لم يتم تنفيذ أمر الشراء، جاري إلغاؤه.")
                     else:
                         print("[SLEEP] بانتظار الفرصة الآمنة...")
 
@@ -217,7 +216,7 @@ class InstitutionalBot:
                         continue
 
                     if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
-                        print("[DCA] تفعيل التعافي الذكي, إرسال أمر التعزيز وبانتظار التنفيذ...")
+                        print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز وبانتظار التنفيذ...")
                         avail_balance = self.get_balance()
                         if avail_balance >= 5:
                             dca_budget = avail_balance * 0.5
@@ -242,7 +241,7 @@ class InstitutionalBot:
                                     self.dca_used = True
                                     print(f"[DCA SUCCESS] تم تنفيذ التعزيز وتحديث متوسط السعر بدقة: {self.entry_price:.2f}")
                                 else:
-                                    print("[DCA TIMEOUT] لم يتم تنفيذ أمر التعزيز في الوقت المحدد, تم تخطيه بأمان.")
+                                    print("[DCA TIMEOUT] لم يتم تنفيذ أمر التعزيز في الوقت المحدد، تم تخطيه بأمان.")
 
                     peak_drawdown = (self.highest_price - current_price) / self.highest_price
                     if pnl_pct >= 0.008 and peak_drawdown >= TRAILING_CALLBACK:
@@ -252,7 +251,6 @@ class InstitutionalBot:
                         time.sleep(10)
 
                 time.sleep(15)
-            except Exception as e:
             except Exception as e:
                 print(f"[CRITICAL ERROR] Loop exception: {e}")
                 time.sleep(15)
