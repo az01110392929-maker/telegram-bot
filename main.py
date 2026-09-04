@@ -33,7 +33,7 @@ class InstitutionalTradingBotOKX:
         self.poll_interval = 20  # فترة الفحص المنتظم
         
         # إعدادات هندسية متقدمة لإدارة رأس المال والمخاطر
-        self.base_max_allocation_pct = 0.80  # استخدام 80% من الرصيد المتاح للرغبة في صفقات كبرى (تقريب 50$ من رصيدك)
+        self.base_max_allocation_pct = 0.80  # استخدام 80% من الرصيد المتاح للرغبة في صفقات كبرى (حوالي 52$)
         self.trailing_drop_pct = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
         self.dca_threshold_pct = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
         
@@ -64,7 +64,6 @@ class InstitutionalTradingBotOKX:
         توافق الأطر الزمنية، ومؤشر ATR الديناميكي لتحديد الأهداف
         """
         try:
-            # 1. فحص دفتر الأوامر (Order Book) لكشف جدران التلاعب والسيولة الحقيقية
             order_book = await exchange.fetch_order_book(self.symbol, limit=50)
             bids = order_book['bids']
             asks = order_book['asks']
@@ -75,14 +74,12 @@ class InstitutionalTradingBotOKX:
             if asks_top_vol > 0 and (bids_top_vol / asks_top_vol) < 1.2:
                 return False, 0, 0, 0
 
-            # 2. فحص الترند على إطار الساعة (1h)
             ohlcv_1h = await exchange.fetch_ohlcv(self.symbol, timeframe='1h', limit=30)
             closes_1h = [c[4] for c in ohlcv_1h]
             ema_1h = sum(closes_1h) / len(closes_1h)
             if closes_1h[-1] < ema_1h:
                 return False, 0, 0, 0
 
-            # 3. فحص إطار الـ 15 دقيقة ومؤشر التقلب ATR
             ohlcv_15m = await exchange.fetch_ohlcv(self.symbol, timeframe='15m', limit=50)
             if not ohlcv_15m or len(ohlcv_15m) < 50:
                 return False, 0, 0, 0
@@ -118,37 +115,34 @@ class InstitutionalTradingBotOKX:
 
         while True:
             try:
-                # 1. جلب السعر الحالي والرصيد المتاح
                 ticker = await exchange.fetch_ticker(self.symbol)
                 current_price = float(ticker['last'])
                 balance = await self.get_available_balance(exchange)
 
                 logger.info(f"📊 [OKX-Scanner] السعر الحالي: {current_price} | الرصيد الحر المتاح: {balance:.2f} USDT")
 
-                # 2. إدارة الصفقة المفتوحة والحماية لحظياً (مع تتبع الأرباح والتعافي الذكي DCA)
                 if self.in_position:
                     tp_price = self.entry_price * (1 + self.current_tp_target)
                     sl_price = self.entry_price * (1 - self.current_sl_target)
                     price_diff = (current_price - self.entry_price) / self.entry_price
                     logger.info(f"مراقبة صفقة نشطة. متوسط الدخول: {self.entry_price:.2f} | التغير: {price_diff * 100:.2f}%")
 
-                    # نظام التعافي الذكي (Smart DCA) عند حدوث هبوط تكتيكي مؤقت
                     if not self.dca_used and current_price <= (self.entry_price * (1 - self.dca_threshold_pct)):
                         logger.info("🔄 تفعيل التعافي الذكي (DCA) لتعديل متوسط السعر وتقليل المخاطر...")
                         dca_budget = min(balance * 0.4, 30.0)
                         if dca_budget >= 10.0:
                             amount_to_buy = dca_budget / current_price
                             order = await exchange.create_market_buy_order(self.symbol, amount_to_buy)
-                            filled_price = float(order.get('average', current_price) or current_price)
-                            filled_amount = float(order.get('filled', amount_to_buy))
-                            
-                            self.total_cost += (filled_price * filled_amount)
-                            self.total_amount += filled_amount
-                            self.entry_price = self.total_cost / self.total_amount
-                            self.dca_used = True
-                            logger.info(f"تم تنفيذ تعزيز DCA بنجاح. متوسط السعر الجديد: {self.entry_price:.2f}")
+                            if order:
+                                filled_price = float(order.get('average') or order.get('price') or current_price)
+                                filled_amount = float(order.get('filled') or amount_to_buy)
+                                
+                                self.total_cost += (filled_price * filled_amount)
+                                self.total_amount += filled_amount
+                                self.entry_price = self.total_cost / self.total_amount
+                                self.dca_used = True
+                                logger.info(f"تم تنفيذ تعزيز DCA بنجاح. متوسط السعر الجديد: {self.entry_price:.2f}")
 
-                    # وقف الخسارة الفوري المحمي
                     if current_price <= sl_price:
                         logger.warning("🛡️ تفعيل وقف الخسارة لحماية رأس المال الأساسي. جاري الخروج الفوري...")
                         await exchange.create_market_sell_order(self.symbol, self.total_amount)
@@ -156,7 +150,6 @@ class InstitutionalTradingBotOKX:
                         logger.warning("تم إغلاق الصفقة بالكامل لحماية الرصيد.")
                         continue
 
-                    # تحديث القمة السعرية لتتبع الأرباح (Trailing Take Profit)
                     if current_price > self.highest_price:
                         self.highest_price = current_price
 
@@ -173,12 +166,10 @@ class InstitutionalTradingBotOKX:
                             logger.info("تم جني الأرباح وتأمين الكاش بنجاح.")
                             continue
 
-                # 3. شروط البحث والدخول في صفقات جديدة بناءً على السيولة المؤسسية
                 elif not self.in_position:
                     is_valid, dyn_tp, dyn_sl, strength_score = await self.institutional_market_analysis(exchange)
                     
                     if is_valid:
-                        # تخصيص نسبة ذكية من إجمالي الرصيد المتاح (80% مضروبة في قوة السيولة)
                         allocated_budget = balance * self.base_max_allocation_pct * strength_score
                         
                         if allocated_budget >= 10.0:
@@ -186,21 +177,21 @@ class InstitutionalTradingBotOKX:
                             amount_to_buy = allocated_budget / current_price
                             
                             order = await exchange.create_market_buy_order(self.symbol, amount_to_buy)
-                            filled_price = float(order.get('average', current_price) or current_price)
-                            filled_amount = float(order.get('filled', amount_to_buy))
-                            
-                            # تسجيل تفاصيل الصفقة النشطة
-                            self.entry_price = filled_price
-                            self.total_amount = filled_amount
-                            self.total_cost = filled_price * filled_amount
-                            self.current_tp_target = dyn_tp
-                            self.current_sl_target = dyn_sl
-                            self.dca_used = False
-                            self.highest_price = filled_price
-                            self.trailing_active = False
-                            self.in_position = True
-                            
-                            logger.info(f"تم تنفيذ الدخول المؤسسي بنجاح عند سعر: {self.entry_price}")
+                            if order:
+                                filled_price = float(order.get('average') or order.get('price') or current_price)
+                                filled_amount = float(order.get('filled') or amount_to_buy)
+                                
+                                self.entry_price = filled_price
+                                self.total_amount = filled_amount
+                                self.total_cost = filled_price * filled_amount
+                                self.current_tp_target = dyn_tp
+                                self.current_sl_target = dyn_sl
+                                self.dca_used = False
+                                self.highest_price = filled_price
+                                self.trailing_active = False
+                                self.in_position = True
+                                
+                                logger.info(f"تم تنفيذ الدخول المؤسسي بنجاح عند سعر: {self.entry_price}")
                         else:
                             logger.warning("⚠️ الرصيد المتاح لا يغطي الحد الأدنى للصفقة المؤسسية (10$).")
                     else:
