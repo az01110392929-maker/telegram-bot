@@ -4,7 +4,7 @@ import hmac
 import hashlib
 import base64
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ==================== إعدادات المنظومة المؤسسية المباشرة ====================
 API_KEY = "f6a374d9-736e-4c07-a0de-16e93e253f36"
@@ -31,7 +31,8 @@ class InstitutionalBot:
         self.order_id = None
 
     def get_signed_headers(self, method, request_path, body=""):
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        # صيغة الوقت الدقيقة المتوافقة تماماً مع معايير OKX v5
+        timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
         sign = base64.b64encode(mac.digest()).decode('utf-8')
