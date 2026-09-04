@@ -19,6 +19,7 @@ STOP_LOSS_PCT = 0.003
 DCA_TRIGGER_PCT = 0.0015    
 TRAILING_CALLBACK = 0.002   
 TIMEFRAME = "15m"
+HIGHER_TIMEFRAME = "1H"
 
 class InstitutionalBot:
     def __init__(self):
@@ -29,6 +30,8 @@ class InstitutionalBot:
         self.highest_price = 0.0
         self.dca_used = False
         self.order_id = None
+        self.breakeven_activated = False
+        self.active_stop_loss_pct = STOP_LOSS_PCT
 
     def get_signed_headers(self, method, request_path, body=""):
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
@@ -75,16 +78,73 @@ class InstitutionalBot:
             print(f"[ERROR] Ticker price failed: {e}")
         return None
 
+    def calculate_adx(self, candles, period=14):
+        try:
+            if len(candles) < period + 1:
+                return 25.0
+            
+            tr_list = []
+            plus_dm_list = []
+            minus_dm_list = []
+            
+            for i in range(1, len(candles)):
+                high = float(candles[i][2])
+                low = float(candles[i][3])
+                prev_high = float(candles[i-1][2])
+                prev_low = float(candles[i-1][3])
+                prev_close = float(candles[i-1][4])
+                
+                tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+                tr_list.append(tr)
+                
+                plus_dm = high - prev_high if (high - prev_high) > (prev_low - low) and (high - prev_high) > 0 else 0
+                minus_dm = prev_low - low if (prev_low - low) > (high - prev_high) and (prev_low - low) > 0 else 0
+                
+                plus_dm_list.append(plus_dm)
+                minus_dm_list.append(minus_dm)
+                
+            avg_tr = sum(tr_list[-period:]) / period
+            if avg_tr == 0:
+                return 0.0
+            avg_plus_di = (sum(plus_dm_list[-period:]) / period) / avg_tr * 100
+            avg_minus_di = (sum(minus_dm_list[-period:]) / period) / avg_tr * 100
+            
+            sum_di = avg_plus_di + avg_minus_di
+            if sum_di == 0:
+                dx = 0
+            else:
+                dx = abs(avg_plus_di - avg_minus_di) / sum_di * 100
+            return dx
+        except Exception:
+            return 25.0
+
     def check_market_conditions(self):
         try:
-            path = f"/api/v5/market/candles?instId={SYMBOL}&bar={TIMEFRAME}&limit=20"
+            # 1. فحص الاتجاه الأكبر (فريم الساعة)
+            htf_path = f"/api/v5/market/candles?instId={SYMBOL}&bar={HIGHER_TIMEFRAME}&limit=20"
+            htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
+            if htf_res.get("code") == "0" and htf_res.get("data"):
+                htf_candles_reversed = list(reversed(htf_res["data"]))
+                htf_closes = [float(c[4]) for c in htf_candles_reversed]
+                htf_ema = sum(htf_closes) / len(htf_closes)
+                htf_current = htf_closes[-1]
+                if htf_current <= htf_ema:
+                    return False
+
+            # 2. فحص الفريم الأساسي (15 دقيقة) وعكس الشموع لترتيب صحيح للـ ADX
+            path = f"/api/v5/market/candles?instId={SYMBOL}&bar={TIMEFRAME}&limit=25"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
                 return False
             
-            closes = [float(candle[4]) for candle in res["data"]]
-            ema_20 = sum(closes) / len(closes)
-            current_price = closes[0]
+            candles_reversed = list(reversed(res["data"]))
+            closes = [float(candle[4]) for candle in candles_reversed]
+            ema_20 = sum(closes[-20:]) / 20
+            current_price = closes[-1]
+
+            adx_val = self.calculate_adx(candles_reversed)
+            if adx_val < 20:
+                return False
 
             book_path = f"/api/v5/market/books?instId={SYMBOL}&sz=15"
             book_res = requests.get(BASE_URL + book_path, timeout=10).json()
@@ -111,11 +171,11 @@ class InstitutionalBot:
                 execution_price = price * 0.9990 
 
             if is_btc_sz:
-                size_btc = round(amount, 4)
+                size_btc = round(amount, 6)
             else:
-                size_btc = round(amount / execution_price, 4)
+                size_btc = round(amount / execution_price, 6)
 
-            if size_btc < 0.0001:
+            if size_btc < 0.000001:
                 return None
             
             body = {
@@ -156,7 +216,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز بربط الحساب الرئيسي...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز بالتحديثات النهائية والمصححة...")
         while True:
             try:
                 current_price = self.get_ticker_price()
@@ -174,7 +234,7 @@ class InstitutionalBot:
                         continue
 
                     if self.check_market_conditions():
-                        print("[FIRE] تطابق الشروط! جاري إرسال أمر الشراء...")
+                        print("[FIRE] تطابق الشروط بنجاح! جاري إرسال أمر الشراء...")
                         trade_budget = avail_balance * ALLOCATION_PCT
                         
                         order_id = self.place_order("buy", current_price, trade_budget, is_btc_sz=False)
@@ -187,9 +247,11 @@ class InstitutionalBot:
                                     self.entry_price = current_price
                                     self.highest_price = current_price
                                     self.position_size_usdt = trade_budget
-                                    self.position_size_btc = round(trade_budget / current_price, 4)
+                                    self.position_size_btc = round(trade_budget / current_price, 6)
                                     self.dca_used = False
                                     self.order_id = order_id
+                                    self.breakeven_activated = False
+                                    self.active_stop_loss_pct = STOP_LOSS_PCT
                                     print(f"[ACTIVE SUCCESS] تم التأكيد والدخول بنجاح بسعر: {self.entry_price}")
                                     break
                             else:
@@ -206,19 +268,28 @@ class InstitutionalBot:
 
                     print(f"[MONITORING] المتوسط: {self.entry_price:.2f} | الحالي: {current_price} | الربح/الخسارة: {pnl_pct*100:.2f}%")
 
-                    if drawdown_pct >= STOP_LOSS_PCT:
-                        print("[STOP LOSS] تفعيل وقف الخسارة الطارئ وحماية رأس المال...")
+                    # تفعيل تأمين نقطة الدخول عند تحقيق 0.5% ربح
+                    if pnl_pct >= 0.005 and not self.breakeven_activated:
+                        self.breakeven_activated = True
+                        self.active_stop_loss_pct = 0.0000
+                        print("[BREAKEVEN] تم تحقيق ربح 0.5%! جاري تأمين نقطة الدخول (رفع وقف الخسارة لسعر الدخول)...")
+
+                    if drawdown_pct >= self.active_stop_loss_pct:
+                        if self.breakeven_activated:
+                            print("[BREAKEVEN EXIT] الخروج عند نقطة الدخول بأمان تام...")
+                        else:
+                            print("[STOP LOSS] تفعيل وقف الخسارة الطارئ وحماية رأس المال...")
                         self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
                         self.position = None
                         time.sleep(10)
                         continue
 
                     if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
-                        print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز وبانتظار التنفيذ...")
+                        print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز بالرصيد المتاح وبانتظار التنفيذ...")
                         avail_balance = self.get_balance()
                         if avail_balance >= 5:
-                            dca_budget = avail_balance * 0.5
-                            dca_btc = round(dca_budget / current_price, 4)
+                            dca_budget = avail_balance
+                            dca_btc = round(dca_budget / current_price, 6)
                             
                             res_id = self.place_order("buy", current_price, dca_budget, is_btc_sz=False)
                             if res_id:
