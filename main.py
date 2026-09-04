@@ -12,7 +12,9 @@ SECRET_KEY = os.getenv("OKX_SECRET_KEY", "")
 PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
-SYMBOL = "BTC-USDT"
+
+# قائمة العملات المتعددة
+SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
 STOP_LOSS_PCT = 0.003       
@@ -21,23 +23,22 @@ TRAILING_CALLBACK = 0.002
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
 
-class InstitutionalBot:
+class MultiAssetInstitutionalBot:
     def __init__(self):
-        self.position = None
-        self.entry_price = 0.0
-        self.position_size_usdt = 0.0 
-        self.position_size_btc = 0.0  
-        self.highest_price = 0.0
-        self.dca_used = False
-        self.order_id = None
-        self.breakeven_activated = False
-        self.active_stop_loss_pct = STOP_LOSS_PCT
+        self.positions = {symbol: None for symbol in SYMBOLS}
+        self.entry_prices = {symbol: 0.0 for symbol in SYMBOLS}
+        self.position_sizes_usdt = {symbol: 0.0 for symbol in SYMBOLS}
+        self.position_sizes_asset = {symbol: 0.0 for symbol in SYMBOLS}
+        self.highest_prices = {symbol: 0.0 for symbol in SYMBOLS}
+        self.dca_used = {symbol: False for symbol in SYMBOLS}
+        self.breakeven_activated = {symbol: False for symbol in SYMBOLS}
+        self.active_stop_loss_pct = {symbol: STOP_LOSS_PCT for symbol in SYMBOLS}
 
     def get_signed_headers(self, method, request_path, body=""):
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        sign = base64.b64encode(mac.digest()).decode('utf-8')
+        sign = mac.digest().hex()
         return {
             "OK-ACCESS-KEY": API_KEY,
             "OK-ACCESS-SIGN": sign,
@@ -67,15 +68,15 @@ class InstitutionalBot:
             print(f"[ERROR] Balance fetch failed: {e}")
             return 0.0
 
-    def get_ticker_price(self):
+    def get_ticker_price(self, symbol):
         try:
-            path = f"/api/v5/market/ticker?instId={SYMBOL}"
+            path = f"/api/v5/market/ticker?instId={symbol}"
             response = requests.get(BASE_URL + path, timeout=10)
             data = response.json()
             if data.get("code") == "0":
                 return float(data["data"][0]["last"])
         except Exception as e:
-            print(f"[ERROR] Ticker price failed: {e}")
+            print(f"[ERROR] Ticker price failed for {symbol}: {e}")
         return None
 
     def calculate_adx(self, candles, period=14):
@@ -118,10 +119,9 @@ class InstitutionalBot:
         except Exception:
             return 25.0
 
-    def check_market_conditions(self):
+    def check_market_conditions(self, symbol):
         try:
-            # 1. فحص الاتجاه الأكبر (فريم الساعة)
-            htf_path = f"/api/v5/market/candles?instId={SYMBOL}&bar={HIGHER_TIMEFRAME}&limit=20"
+            htf_path = f"/api/v5/market/candles?instId={symbol}&bar={HIGHER_TIMEFRAME}&limit=20"
             htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
             if htf_res.get("code") == "0" and htf_res.get("data"):
                 htf_candles_reversed = list(reversed(htf_res["data"]))
@@ -131,8 +131,7 @@ class InstitutionalBot:
                 if htf_current <= htf_ema:
                     return False
 
-            # 2. فحص الفريم الأساسي (15 دقيقة) وعكس الشموع لترتيب صحيح للـ ADX
-            path = f"/api/v5/market/candles?instId={SYMBOL}&bar={TIMEFRAME}&limit=25"
+            path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=25"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
                 return False
@@ -146,7 +145,7 @@ class InstitutionalBot:
             if adx_val < 20:
                 return False
 
-            book_path = f"/api/v5/market/books?instId={SYMBOL}&sz=15"
+            book_path = f"/api/v5/market/books?instId={symbol}&sz=15"
             book_res = requests.get(BASE_URL + book_path, timeout=10).json()
             if book_res.get("code") != "0":
                 return False
@@ -160,31 +159,31 @@ class InstitutionalBot:
             if current_price > ema_20 and bid_volume > (ask_volume * 1.1):
                 return True
         except Exception as e:
-            print(f"[WARNING] Market check error: {e}")
+            print(f"[WARNING] Market check error for {symbol}: {e}")
         return False
 
-    def place_order(self, side, price, amount, is_btc_sz=False):
+    def place_order(self, symbol, side, price, amount, is_sz=False):
         try:
             path = "/api/v5/trade/order"
             execution_price = price
             if side == "sell":
                 execution_price = price * 0.9990 
 
-            if is_btc_sz:
-                size_btc = round(amount, 6)
+            if is_sz:
+                size_asset = round(amount, 6)
             else:
-                size_btc = round(amount / execution_price, 6)
+                size_asset = round(amount / execution_price, 6)
 
-            if size_btc < 0.000001:
+            if size_asset < 0.000001:
                 return None
             
             body = {
-                "instId": SYMBOL,
+                "instId": symbol,
                 "tdMode": "cash",
                 "side": side,
                 "ordType": "limit",
                 "px": str(round(execution_price, 2)),
-                "sz": str(size_btc)
+                "sz": str(size_asset)
             }
             
             import json
@@ -194,17 +193,17 @@ class InstitutionalBot:
             
             if res.get("code") == "0":
                 ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
-                print(f"[SUCCESS] Order {side.upper()} placed, ID: {ord_id}")
+                print(f"[SUCCESS] Order {side.upper()} placed on {symbol}, ID: {ord_id}")
                 return ord_id
             else:
-                print(f"[ERROR] Order rejected: {res.get('msg')}")
+                print(f"[ERROR] Order rejected on {symbol}: {res.get('msg')}")
         except Exception as e:
             print(f"[ERROR] Place order exception: {e}")
         return None
 
-    def check_order_filled(self, order_id):
+    def check_order_filled(self, symbol, order_id):
         try:
-            path = f"/api/v5/trade/order?instId={SYMBOL}&ordId={order_id}"
+            path = f"/api/v5/trade/order?instId={symbol}&ordId={order_id}"
             headers = self.get_signed_headers("GET", path)
             res = requests.get(BASE_URL + path, headers=headers, timeout=10).json()
             if res.get("code") == "0" and res.get("data"):
@@ -216,108 +215,110 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز بالتحديثات النهائية والمصححة...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بالتحديث التلقائي الشامل...")
         while True:
             try:
-                current_price = self.get_ticker_price()
-                if not current_price:
-                    time.sleep(15)
-                    continue
+                # 1. متابعة الصفقات المفتوحة
+                for symbol in SYMBOLS:
+                    if self.positions[symbol] == "LONG":
+                        current_price = self.get_ticker_price(symbol)
+                        if not current_price:
+                            continue
 
-                avail_balance = self.get_balance()
-                print(f"[SCANNER] السعر الحالي: {current_price} | الرصيد المتاح في الحساب: {avail_balance:.2f} USDT")
+                        if current_price > self.highest_prices[symbol]:
+                            self.highest_prices[symbol] = current_price
 
-                if not self.position:
-                    if avail_balance < 10:
-                        print("[WAITING] الرصيد المتاح أقل من الحد الأدنى للصفقة.")
-                        time.sleep(30)
-                        continue
+                        pnl_pct = (current_price - self.entry_prices[symbol]) / self.entry_prices[symbol]
+                        drawdown_pct = (self.entry_prices[symbol] - current_price) / self.entry_prices[symbol]
 
-                    if self.check_market_conditions():
-                        print("[FIRE] تطابق الشروط بنجاح! جاري إرسال أمر الشراء...")
-                        trade_budget = avail_balance * ALLOCATION_PCT
-                        
-                        order_id = self.place_order("buy", current_price, trade_budget, is_btc_sz=False)
-                        if order_id:
-                            print("[WAITING FILL] بانتظار تأكيد التنفيذ التام للدخول...")
-                            for _ in range(6):
-                                time.sleep(5)
-                                if self.check_order_filled(order_id):
-                                    self.position = "LONG"
-                                    self.entry_price = current_price
-                                    self.highest_price = current_price
-                                    self.position_size_usdt = trade_budget
-                                    self.position_size_btc = round(trade_budget / current_price, 6)
-                                    self.dca_used = False
-                                    self.order_id = order_id
-                                    self.breakeven_activated = False
-                                    self.active_stop_loss_pct = STOP_LOSS_PCT
-                                    print(f"[ACTIVE SUCCESS] تم التأكيد والدخول بنجاح بسعر: {self.entry_price}")
-                                    break
+                        print(f"[MONITORING {symbol}] المتوسط: {self.entry_prices[symbol]:.4f} | الحالي: {current_price} | PnL: {pnl_pct*100:.2f}%")
+
+                        if pnl_pct >= 0.005 and not self.breakeven_activated[symbol]:
+                            self.breakeven_activated[symbol] = True
+                            self.active_stop_loss_pct[symbol] = 0.0000
+                            print(f"[BREAKEVEN] تحقيق 0.5% على {symbol}! تم تأمين نقطة الدخول.")
+
+                        if drawdown_pct >= self.active_stop_loss_pct[symbol]:
+                            if self.breakeven_activated[symbol]:
+                                print(f"[BREAKEVEN EXIT] الخروج بأمان عند نقطة الدخول لـ {symbol}...")
                             else:
-                                print("[TIMEOUT] لم يتم تنفيذ أمر الشراء، جاري إلغاؤه.")
-                    else:
-                        print("[SLEEP] بانتظار الفرصة الآمنة...")
-
-                else:
-                    if current_price > self.highest_price:
-                        self.highest_price = current_price
-
-                    pnl_pct = (current_price - self.entry_price) / self.entry_price
-                    drawdown_pct = (self.entry_price - current_price) / self.entry_price
-
-                    print(f"[MONITORING] المتوسط: {self.entry_price:.2f} | الحالي: {current_price} | الربح/الخسارة: {pnl_pct*100:.2f}%")
-
-                    # تفعيل تأمين نقطة الدخول عند تحقيق 0.5% ربح
-                    if pnl_pct >= 0.005 and not self.breakeven_activated:
-                        self.breakeven_activated = True
-                        self.active_stop_loss_pct = 0.0000
-                        print("[BREAKEVEN] تم تحقيق ربح 0.5%! جاري تأمين نقطة الدخول (رفع وقف الخسارة لسعر الدخول)...")
-
-                    if drawdown_pct >= self.active_stop_loss_pct:
-                        if self.breakeven_activated:
-                            print("[BREAKEVEN EXIT] الخروج عند نقطة الدخول بأمان تام...")
-                        else:
-                            print("[STOP LOSS] تفعيل وقف الخسارة الطارئ وحماية رأس المال...")
-                        self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
-                        self.position = None
-                        time.sleep(10)
-                        continue
-
-                    if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
-                        print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز بالرصيد المتاح وبانتظار التنفيذ...")
-                        avail_balance = self.get_balance()
-                        if avail_balance >= 5:
-                            dca_budget = avail_balance
-                            dca_btc = round(dca_budget / current_price, 6)
+                                print(f"[STOP LOSS] تفعيل وقف الخسارة الطارئ لـ {symbol}...")
                             
-                            res_id = self.place_order("buy", current_price, dca_budget, is_btc_sz=False)
+                            self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
+                            self.positions[symbol] = None
+                            time.sleep(5)
+                            continue
+
+                        if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol]:
+                            print(f"[DCA] تفعيل التعافي الذكي لـ {symbol}...")
+                            dca_budget = self.position_sizes_usdt[symbol]
+                            res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
                                 dca_filled = False
                                 for _ in range(6):
                                     time.sleep(5)
-                                    if self.check_order_filled(res_id):
+                                    if self.check_order_filled(symbol, res_id):
                                         dca_filled = True
                                         break
                                 
                                 if dca_filled:
-                                    total_cost = self.position_size_usdt + dca_budget
-                                    total_size = self.position_size_btc + dca_btc
+                                    dca_asset_qty = dca_budget / current_price
+                                    total_cost = self.position_sizes_usdt[symbol] + dca_budget
+                                    total_size = self.position_sizes_asset[symbol] + dca_asset_qty
                                     
-                                    self.entry_price = total_cost / total_size
-                                    self.position_size_usdt = total_cost
-                                    self.position_size_btc = total_size
-                                    self.dca_used = True
-                                    print(f"[DCA SUCCESS] تم تنفيذ التعزيز وتحديث متوسط السعر بدقة: {self.entry_price:.2f}")
-                                else:
-                                    print("[DCA TIMEOUT] لم يتم تنفيذ أمر التعزيز في الوقت المحدد، تم تخطيه بأمان.")
+                                    self.entry_prices[symbol] = total_cost / total_size
+                                    self.position_sizes_usdt[symbol] = total_cost
+                                    self.position_sizes_asset[symbol] = total_size
+                                    self.dca_used[symbol] = True
+                                    print(f"[DCA SUCCESS] تم تعزيز {symbol} وتحديث المتوسط: {self.entry_prices[symbol]:.4f}")
 
-                    peak_drawdown = (self.highest_price - current_price) / self.highest_price
-                    if pnl_pct >= 0.008 and peak_drawdown >= TRAILING_CALLBACK:
-                        print(f"[TAKE PROFIT] جني الأرباح عند القمة: {self.highest_price}")
-                        self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
-                        self.position = None
-                        time.sleep(10)
+                        peak_drawdown = (self.highest_prices[symbol] - current_price) / self.highest_prices[symbol]
+                        if pnl_pct >= 0.008 and peak_drawdown >= TRAILING_CALLBACK:
+                            print(f"[TAKE PROFIT] جني الأرباح للعملة {symbol} عند القمة: {self.highest_prices[symbol]}")
+                            self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
+                            self.positions[symbol] = None
+                            time.sleep(5)
+
+                # 2. البحث عن فرص جديدة باستخدام القراءة الحية والديناميكية لإجمالي المحفظة
+                avail_balance = self.get_balance()
+                active_positions_value = sum(self.position_sizes_usdt.values())
+                total_portfolio_value = avail_balance + active_positions_value
+                
+                print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة الحي: {total_portfolio_value:.2f} USDT")
+
+                for symbol in SYMBOLS:
+                    if self.positions[symbol] is None:
+                        current_price = self.get_ticker_price(symbol)
+                        if not current_price:
+                            continue
+
+                        if self.check_market_conditions(symbol):
+                            print(f"[FIRE] تطابق الشروط على العملة {symbol}! جاري التنفيذ...")
+                            # التعديل الأخير المطبق: قراءة إجمالي المحفظة الحية وتوزيعها ديناميكياً على 3
+                            trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
+                            
+                            order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
+                            if order_id:
+                                print(f"[WAITING FILL] بانتظار تأكيد الشراء لـ {symbol}...")
+                                for _ in range(6):
+                                    time.sleep(5)
+                                    if self.check_order_filled(symbol, order_id):
+                                        self.positions[symbol] = "LONG"
+                                        self.entry_prices[symbol] = current_price
+                                        self.highest_prices[symbol] = current_price
+                                        self.position_sizes_usdt[symbol] = trade_budget
+                                        self.position_sizes_asset[symbol] = round(trade_budget / current_price, 6)
+                                        self.dca_used[symbol] = False
+                                        self.breakeven_activated[symbol] = False
+                                        self.active_stop_loss_pct[symbol] = STOP_LOSS_PCT
+                                        print(f"[ACTIVE SUCCESS] تم فتح الصفقة على {symbol} بسعر: {current_price}")
+                                        break
+                                else:
+                                    print(f"[TIMEOUT] لم يتم تنفيذ الشراء على {symbol}.")
+                        else:
+                            print(f"[SLEEP] بانتظار الفرصة على {symbol}...")
+                    
+                    time.sleep(5)
 
                 time.sleep(15)
             except Exception as e:
@@ -325,6 +326,6 @@ class InstitutionalBot:
                 time.sleep(15)
 
 if __name__ == "__main__":
-    bot = InstitutionalBot()
+    bot = MultiAssetInstitutionalBot()
     bot.run()
-    
+                            
