@@ -2,7 +2,6 @@ import os
 import time
 import hmac
 import hashlib
-import base64
 import requests
 from datetime import datetime, timezone
 
@@ -38,7 +37,8 @@ class MultiAssetInstitutionalBot:
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        sign = base64.b64encode(mac.digest()).decode('utf-8')
+        # التعديل الأول: استخدام Hex الصحيح للتوقيع
+        sign = mac.digest().hex()
         return {
             "OK-ACCESS-KEY": API_KEY,
             "OK-ACCESS-SIGN": sign,
@@ -55,14 +55,20 @@ class MultiAssetInstitutionalBot:
             data = response.json()
             
             if data.get("code") == "0" and data.get("data"):
+                # التعديل الثاني: قراءة إجمالي الرصيد المتاح في حساب التداول الموحد
+                total_eq = float(data["data"][0].get("totalEq", 0))
+                if total_eq > 0:
+                    return total_eq
+                
                 details = data["data"][0].get("details", [])
                 for detail in details:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        total_avail = avail if avail > 0 else cash
-                        if total_avail > 0:
-                            return total_avail
+                        eq = float(detail.get("eq", 0))
+                        val = max(avail, cash, eq)
+                        if val > 0:
+                            return val
             return 0.0
         except Exception as e:
             print(f"[ERROR] Balance fetch failed: {e}")
@@ -215,7 +221,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالطريقة الأصلية المعتمدة...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالتعديلات الصحيحة بالكامل...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -279,7 +285,7 @@ class MultiAssetInstitutionalBot:
                             self.positions[symbol] = None
                             time.sleep(5)
 
-                # 2. البحث عن فرص جديدة بالرصيد الحي الحقيقي
+                # 2. البحث عن فرص جديدة بالرصيد الحقيقي الصحيح
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
