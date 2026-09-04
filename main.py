@@ -4,21 +4,25 @@ import math
 import os
 import sys
 
-# جلب المتغيرات البيئية بدقة
-okx_api = os.getenv('OKX_API_KEY') or os.getenv('OKX_API')
-okx_secret = os.getenv('OKX_SECRET_KEY') or os.getenv('OKX_SECRET')
-okx_pass = os.getenv('OKX_PASSWORD') or os.getenv('OKX_PASS') or os.getenv('OKX_PAS')
+# البحث التلقائي الشامل عن المفاتيح في متغيرات البيئة بغض النظر عن أسماؤها
+api_key, secret_key, password = None, None, None
 
-# إعدادات الاتصال الإجبارية لمنصة OKX مع تمرير كلمة المرور بوضوح تام
+for k, v in os.environ.items():
+    k_upper = k.upper()
+    if 'API' in k_upper and not api_key:
+        api_key = v
+    elif ('SECRET' in k_upper or 'SEC' in k_upper) and not secret_key:
+        secret_key = v
+    elif ('PASS' in k_upper or 'PAS' in k_upper) and not password:
+        password = v
+
+# إعدادات الاتصال الآمنة بمنصة OKX
 exchange = ccxt.okx({
-    'apiKey': okx_api,
-    'secret': okx_secret,
-    'password': okx_pass,
+    'apiKey': api_key,
+    'secret': secret_key,
+    'password': password,
     'enableRateLimit': True,
-    'options': {
-        'defaultType': 'spot',
-        'adjustForTimeDifference': True
-    }
+    'options': {'defaultType': 'spot'}
 })
 
 SYMBOLS = ['BTC/USDT', 'ETH/USDT']
@@ -182,7 +186,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت المؤسسي مع الاعتماد الكامل للـ Passphrase ===")
+    print("=== تشغيل البوت مع البحث التلقائي عن مفاتيح البيئة ===")
     
     while True:
         try:
