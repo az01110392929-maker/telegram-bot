@@ -37,7 +37,6 @@ class MultiAssetInstitutionalBot:
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        # التعديل الأول: استخدام Hex الصحيح للتوقيع
         sign = mac.digest().hex()
         return {
             "OK-ACCESS-KEY": API_KEY,
@@ -50,16 +49,13 @@ class MultiAssetInstitutionalBot:
     def get_balance(self):
         try:
             path = "/api/v5/account/balance"
-            headers = self.get_signed_headers("GET", path)
-            response = requests.get(BASE_URL + path, headers=headers, timeout=10)
+            params = "?ccy=USDT"
+            full_path = path + params
+            headers = self.get_signed_headers("GET", full_path)
+            response = requests.get(BASE_URL + full_path, headers=headers, timeout=10)
             data = response.json()
             
             if data.get("code") == "0" and data.get("data"):
-                # التعديل الثاني: قراءة إجمالي الرصيد المتاح في حساب التداول الموحد
-                total_eq = float(data["data"][0].get("totalEq", 0))
-                if total_eq > 0:
-                    return total_eq
-                
                 details = data["data"][0].get("details", [])
                 for detail in details:
                     if detail.get("ccy") == "USDT":
@@ -221,7 +217,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالتعديلات الصحيحة بالكامل...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالتعديل النهائي للرصيد...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -285,7 +281,7 @@ class MultiAssetInstitutionalBot:
                             self.positions[symbol] = None
                             time.sleep(5)
 
-                # 2. البحث عن فرص جديدة بالرصيد الحقيقي الصحيح
+                # 2. البحث عن فرص جديدة بالرصيد الحقيقي الحي
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
@@ -333,4 +329,4 @@ class MultiAssetInstitutionalBot:
 if __name__ == "__main__":
     bot = MultiAssetInstitutionalBot()
     bot.run()
-    
+
