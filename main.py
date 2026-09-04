@@ -22,7 +22,7 @@ exchange = ccxt.okx({
 SYMBOLS = ['BTC/USDT', 'ETH/USDT']
 
 # الإعدادات الهندسية المتقدمة
-BASE_MAX_ALLOCATION_PCT = 0.85  # الحد الأقصى لتخصيص الرصيد (85%)
+BASE_MAX_ALLOCATION_PCT = 0.80  # تخصيص نسبة ذكية من الرصيد الإجمالي
 TRAILING_DROP_PCT = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
 DCA_THRESHOLD_PCT = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
 
@@ -43,7 +43,13 @@ def safe_api_call(func, *args, **kwargs):
 def get_balance(currency='USDT'):
     try:
         balance = safe_api_call(exchange.fetch_balance)
-        return float(balance['free'].get(currency, 0))
+        # فحص الرصيد الحر في محفظة التداول الفوري أو الإجمالي المتاح
+        free_spot = float(balance['free'].get(currency, 0))
+        total_balance = float(balance['total'].get(currency, 0))
+        
+        # إذا كان الرصيد الحر في الفوري قليلاً، نأخذ القيمة المتاحة الأكبر لضمان قراءة الرصيد الحقيقي
+        available_usdt = max(free_spot, total_balance)
+        return available_usdt
     except Exception as e:
         print(f"خطأ في جلب الرصيد: {e}")
         return 0.0
@@ -57,10 +63,6 @@ def get_market_price(symbol):
         return None
 
 def institutional_market_analysis(symbol):
-    """
-    تحليل مؤسسي متكامل: تصفية جدران التلاعب (Spoofing)، 
-    توافق الأطر الزمنية المتعددة (15m + 1h)، والأهداف الديناميكية (ATR)
-    """
     try:
         order_book = safe_api_call(exchange.fetch_order_book, symbol, limit=50)
         bids = order_book['bids']
@@ -188,12 +190,12 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت المؤسسي الأسطوري بنجاح تام ===")
+    print("=== تشغيل البوت المؤسسي مع رصد الرصيد الشامل ===")
     
     while True:
         try:
             usdt_balance = get_balance('USDT')
-            print(f"رصيد USDT المتاح: {usdt_balance}$")
+            print(f"رصيد USDT المتاح الإجمالي: {usdt_balance}$")
 
             for symbol in SYMBOLS:
                 is_valid, dyn_tp, dyn_sl, strength_score = institutional_market_analysis(symbol)
@@ -209,7 +211,7 @@ def run_bot():
                     if not current_price:
                         continue
 
-                    print(f"توافق مؤسسي تام لـ {symbol} (معامل القوة: {strength_score:.2f}). تنفيذ الصفقة...")
+                    print(f"توافق مؤسسي تام لـ {symbol} (قيمة الصفقة: {adaptive_trade_amount:.2f}$). تنفيذ...")
                     order = place_order(symbol, adaptive_trade_amount, current_price)
 
                     if order:
@@ -219,7 +221,7 @@ def run_bot():
                         monitor_trade(symbol, filled_price, filled_amount, dyn_tp, dyn_sl)
                         break
                 else:
-                    print(f"الرصيد أو معامل القوة لـ {symbol} لا يسمح بفتح صفقة آمنة حالياً.")
+                    print(f"الرصيد المتاح لـ {symbol} أقل من الحد الأدنى للتشغيل.")
 
             time.sleep(30)
         except Exception as e:
