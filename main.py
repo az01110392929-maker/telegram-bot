@@ -6,10 +6,10 @@ import base64
 import requests
 from datetime import datetime
 
-# ==================== إعدادات المنظومة المؤسسية ====================
-API_KEY = os.getenv("OKX_API_KEY", "")
-SECRET_KEY = os.getenv("OKX_SECRET_KEY", "")
-PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
+# ==================== إعدادات المنظومة المؤسسية المباشرة ====================
+API_KEY = "f6a374d9-736e-4c07-a0de-16e93e253f36"
+SECRET_KEY = "906255B8F592A3250FAA4F102F44C5C1"
+PASSPHRASE = "M01000744741m."
 
 BASE_URL = "https://www.okx.com" 
 SYMBOL = "BTC-USDT"
