@@ -1,35 +1,50 @@
 import ccxt
 import time
 import math
-import sys
+import os
 
-# ضع بيانات الـ API الحقيقية وكلمة مرور الـ API (Passphrase) هنا بدقة
-API_KEY = 'ضع_مفتاح_الـ_API_هنا'
-SECRET_KEY = 'ضع_المفتاح_السري_هنا'
-PASSWORD = 'ضع_كلمة_مرور_الـ_API_هنا'
+# سحب المتغيرات البيئية من Railway وتطهيرها من أي مسافات فارغة لتجنب أخطاء الترميز
+api_key = os.getenv('OKX_API_KEY', '').strip()
+secret_key = os.getenv('OKX_SECRET_KEY', '').strip()
+password = os.getenv('OKX_PASSPHRASE', '').strip()
 
-# إعدادات الاتصال المباشر والآمن بمنصة OKX
+# بحث احتياطي تلقائي في حال كانت المتغيرات مسجلة بأسماء مختصرة في رايلواي
+if not api_key or not secret_key or not password:
+    for k, v in os.environ.items():
+        k_upper = k.upper()
+        if 'API' in k_upper and not api_key:
+            api_key = v.strip()
+        elif ('SEC' in k_upper) and not secret_key:
+            secret_key = v.strip()
+        elif ('PAS' in k_upper) and not password:
+            password = v.strip()
+
+# إعدادات الاتصال الآمنة بمنصة OKX
 exchange = ccxt.okx({
-    'apiKey': API_KEY,
-    'secret': SECRET_KEY,
-    'password': PASSWORD,
+    'apiKey': api_key,
+    'secret': secret_key,
+    'password': password,
     'enableRateLimit': True,
     'options': {'defaultType': 'spot'}
 })
 
+# الأزواج المعتمدة لأعلى سيولة مؤسسية
 SYMBOLS = ['BTC/USDT', 'ETH/USDT']
-BASE_MAX_ALLOCATION_PCT = 0.80
-TRAILING_DROP_PCT = 0.002
-DCA_THRESHOLD_PCT = 0.0015
+
+# الإعدادات الهندسية المتقدمة لإدارة المخاطر ورأس المال
+BASE_MAX_ALLOCATION_PCT = 0.80  # الحد الأقصى لتخصيص الرصيد الذكي
+TRAILING_DROP_PCT = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
+DCA_THRESHOLD_PCT = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
 
 def safe_api_call(func, *args, **kwargs):
+    """نظام الحماية وإعادة المحاولة التلقائية عند انقطاع الشبكة (Circuit Breaker)"""
     max_retries = 5
     delay = 2
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f"تنبيه اتصال (محاولة {attempt + 1}/{max_retries}): {e}")
+            print(f"تنبيه اتصال شبكي (محاولة {attempt + 1}/{max_retries}): {e}")
             if attempt == max_retries - 1:
                 raise e
             time.sleep(delay)
@@ -40,7 +55,7 @@ def get_balance(currency='USDT'):
         balance = safe_api_call(exchange.fetch_balance)
         return float(balance['free'].get(currency, 0))
     except Exception as e:
-        print(f"خطأ في جلب الرصيد: {e}")
+        print(f"خطأ في جلب رصيد التداول الفوري (Spot): {e}")
         return 0.0
 
 def get_market_price(symbol):
@@ -48,11 +63,16 @@ def get_market_price(symbol):
         ticker = safe_api_call(exchange.fetch_ticker, symbol)
         return float(ticker['last'])
     except Exception as e:
-        print(f"خطأ في جلب سعر {symbol}: {e}")
+        print(f"خطأ في جلب السعر اللحظي لـ {symbol}: {e}")
         return None
 
 def institutional_market_analysis(symbol):
+    """
+    تحليل مؤسسي متكامل: تصفية جدران التلاعب (Spoofing)، 
+    توافق الأطر الزمنية (15m + 1h)، ومؤشر ATR الديناميكي
+    """
     try:
+        # 1. كشف التلاعب في دفتر الأوامر والتحقق من السيولة الحقيقية
         order_book = safe_api_call(exchange.fetch_order_book, symbol, limit=50)
         bids = order_book['bids']
         asks = order_book['asks']
@@ -63,12 +83,14 @@ def institutional_market_analysis(symbol):
         if asks_top_vol > 0 and (bids_top_vol / asks_top_vol) < 1.2:
             return None, None, None, None
 
+        # 2. فحص الترند على إطار الساعة (1h)
         ohlcv_1h = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='1h', limit=30)
         closes_1h = [c[4] for c in ohlcv_1h]
         ema_1h = sum(closes_1h) / len(closes_1h)
         if closes_1h[-1] < ema_1h:
             return None, None, None, None
 
+        # 3. فحص إطار الـ 15 دقيقة ومؤشر ATR للحسابات الديناميكية
         ohlcv_15m = safe_api_call(exchange.fetch_ohlcv, symbol, timeframe='15m', limit=50)
         if not ohlcv_15m or len(ohlcv_15m) < 50:
             return None, None, None, None
@@ -117,6 +139,7 @@ def place_order(symbol, amount_usd, price):
         return None
 
 def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, target_sl_pct):
+    """مراقبة ذكية متكاملة مع التعافي (DCA) وتتبع الأرباح الديناميكي (Trailing)"""
     current_entry_price = initial_entry_price
     total_amount = initial_amount
     total_cost = initial_entry_price * initial_amount
@@ -125,7 +148,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
     highest_price = initial_entry_price
     trailing_active = False
 
-    print(f"بدء المراقبة لـ {symbol} | الدخول: {initial_entry_price}")
+    print(f"بدء المراقبة المؤسسية لـ {symbol} | الدخول: {initial_entry_price} | الهدف: {target_tp_pct*100:.2f}%")
 
     while True:
         try:
@@ -137,8 +160,9 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             tp_price = current_entry_price * (1 + target_tp_pct)
             sl_price = current_entry_price * (1 - target_sl_pct)
 
+            # نظام التعافي الذكي (Smart DCA)
             if not dca_used and current_price <= (current_entry_price * (1 - DCA_THRESHOLD_PCT)):
-                print(f"تفعيل التعافي الذكي (DCA) لـ {symbol}...")
+                print(f"تفعيل التعافي الذكي (DCA) لـ {symbol} لتعديل متوسط السعر...")
                 balance_usdt = get_balance('USDT')
                 dca_amount_usd = min(balance_usdt * 0.4, 30.0)
                 
@@ -147,49 +171,52 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
                     if dca_order:
                         dca_filled_price = float(dca_order.get('average', current_price) or current_price)
                         dca_filled_amount = float(dca_order.get('filled', 0))
+                        
                         total_cost += (dca_filled_price * dca_filled_amount)
                         total_amount += dca_filled_amount
                         current_entry_price = total_cost / total_amount
                         dca_used = True
-                        print(f"متوسط السعر الجديد: {current_entry_price}")
+                        print(f"تم تعديل متوسط السعر وأصبح: {current_entry_price}")
 
+            # وقف الخسارة المحمي
             if current_price <= sl_price:
-                print(f"تفعيل وقف الخسارة لـ {symbol}.")
+                print(f"تفعيل وقف الخسارة لحماية رأس المال على {symbol}.")
                 safe_api_call(exchange.create_market_sell_order, symbol, total_amount)
                 break
 
+            # تتبع الأرباح الديناميكي (Trailing Take Profit)
             if current_price > highest_price:
                 highest_price = current_price
 
             if not trailing_active and current_price >= tp_price:
                 trailing_active = True
-                print(f"تفعيل تتبع الأرباح لـ {symbol} عند قمة: {highest_price}")
+                print(f"بلوغ الهدف! تفعيل ملاحقة الأرباح العليا. القمة الحالية: {highest_price}")
 
             if trailing_active:
                 drop_threshold = highest_price * (1 - TRAILING_DROP_PCT)
                 if current_price <= drop_threshold:
-                    print(f"جني الأرباح القصوى لـ {symbol}!")
+                    print(f"ارتداد السعر من القمة -> بيع {symbol} لجني الأرباح القصوى!")
                     safe_api_call(exchange.create_market_sell_order, symbol, total_amount)
                     break
 
             time.sleep(10)
         except Exception as e:
-            print(f"خطأ أثناء المراقبة: {e}")
+            print(f"خطأ أثناء مراقبة الصفقة: {e}")
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت مع التثبيت اليدوي للبيانات ==Raise ===")
+    print("=== بدء تشغيل البوت المؤسسي الآمن (متغيرات بيئية نظيفة) ===")
     
     while True:
         try:
             usdt_balance = get_balance('USDT')
-            print(f"رصيد الـ USDT المتاح: {usdt_balance}$")
+            print(f"رصيد التداول الفوري المتاح (Spot): {usdt_balance}$")
 
             for symbol in SYMBOLS:
                 is_valid, dyn_tp, dyn_sl, strength_score = institutional_market_analysis(symbol)
                 
                 if not is_valid:
-                    print(f"شروط السوق لـ {symbol} لا تلبي المعايير حالياً. التخطي.")
+                    print(f"شروط السوق لـ {symbol} لا تلبي المعايير المؤسسية حالياً. التخطي.")
                     continue
 
                 adaptive_trade_amount = usdt_balance * BASE_MAX_ALLOCATION_PCT * strength_score
@@ -199,20 +226,21 @@ def run_bot():
                     if not current_price:
                         continue
 
-                    print(f"شروط مؤسسية متطابقة لـ {symbol}. تنفيذ بقيمة: {adaptive_trade_amount:.2f}$")
+                    print(f"توافق مؤسسي تام لـ {symbol} (قيمة الصفقة: {adaptive_trade_amount:.2f}$). التنفيذ...")
                     order = place_order(symbol, adaptive_trade_amount, current_price)
 
                     if order:
                         filled_price = float(order.get('average', current_price) or current_price)
                         filled_amount = float(order.get('filled', 0))
+
                         monitor_trade(symbol, filled_price, filled_amount, dyn_tp, dyn_sl)
                         break
                 else:
-                    print(f"الرصيد المتاح لـ {symbol} أقل من الحد الأدنى (10$).")
+                    print(f"الرصيد المتاح لـ {symbol} أقل من الحد الأدنى الآمن للتشغيل.")
 
             time.sleep(30)
         except Exception as e:
-            print(f"خطأ رئيسي: {e}")
+            print(f"خطأ رئيسي في الحلقة الرئيسية: {e}")
             time.sleep(10)
 
 if __name__ == '__main__':
