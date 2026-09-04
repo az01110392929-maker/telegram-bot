@@ -3,7 +3,6 @@ import time
 import hmac
 import hashlib
 import base64
-import json
 import requests
 from datetime import datetime
 
@@ -32,16 +31,9 @@ class InstitutionalBot:
         self.order_id = None
 
     def get_signed_headers(self, method, request_path, body=""):
-        """توقيع طلبات OKX بدقة متناهية لمنع خطأ Signature Error"""
+        """طريقة التوقيع الأصلية المستقرة والموثوقة تماماً مع OKX"""
         timestamp = datetime.utcnow().isoformat() + "Z"
-        
-        # التأكد من أن الـ body يتم تحويله لنص JSON مضغوط بدون مسافات تماماً كما تتطلب المنصة
-        if isinstance(body, dict):
-            body_str = json.dumps(body, separators=(',', ':')) if body else ""
-        else:
-            body_str = body
-
-        message = timestamp + method.upper() + request_path + body_str
+        message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
         sign = base64.b64encode(mac.digest()).decode('utf-8')
         return {
@@ -136,9 +128,11 @@ class InstitutionalBot:
                 "sz": str(size_btc)
             }
             
-            # تمرير الـ body بالكامل كـ dict لتوليد التوقيع الصحيح و إرساله كـ JSON
-            headers = self.get_signed_headers("POST", path, body)
-            res = requests.post(BASE_URL + path, headers=headers, json=body, timeout=10).json()
+            # تحويل البودي لنص بالطريقة الأصلية السليمة تماماً للتوقيع
+            import json
+            body_str = json.dumps(body)
+            headers = self.get_signed_headers("POST", path, body_str)
+            res = requests.post(BASE_URL + path, headers=headers, data=body_str, timeout=10).json()
             
             if res.get("code") == "0":
                 ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
@@ -164,7 +158,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام مصحح رياضياً ومحمي ضد خطأ التوقيع...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام يعمل بالطريقة الأصلية المستقرة...")
         while True:
             try:
                 current_price = self.get_ticker_price()
