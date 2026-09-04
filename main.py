@@ -6,10 +6,10 @@ import base64
 import requests
 from datetime import datetime, timezone
 
-# ==================== إعدادات المنظومة المؤسسية المباشرة ====================
-API_KEY = "f6a374d9-736e-4c07-a0de-16e93e253f36"
-SECRET_KEY = "906255B8F592A3250FAA4F102F44C5C1"
-PASSPHRASE = "M01000744741m."
+# ==================== إعدادات البيئة الآمنة ====================
+API_KEY = os.getenv("OKX_API_KEY", "")
+SECRET_KEY = os.getenv("OKX_SECRET_KEY", "")
+PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
 SYMBOL = "BTC-USDT"
@@ -31,7 +31,6 @@ class InstitutionalBot:
         self.order_id = None
 
     def get_signed_headers(self, method, request_path, body=""):
-        # صيغة الوقت الدقيقة المتوافقة تماماً مع معايير OKX v5
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
@@ -50,8 +49,6 @@ class InstitutionalBot:
             headers = self.get_signed_headers("GET", path)
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
             data = response.json()
-            
-            print(f"[DEBUG OKX RESPONSE] {data}")
             
             if data.get("code") == "0" and data.get("data"):
                 details = data["data"][0].get("details", [])
