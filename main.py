@@ -44,16 +44,24 @@ class InstitutionalBot:
         }
 
     def get_balance(self):
+        """جلب الرصيد المتاح مباشرة من حساب التداول (Trading / Spot)"""
         try:
+            # مسار جلب الأصول لحساب التداول المباشر
             path = "/api/v5/account/balance?ccy=USDT"
             headers = self.get_signed_headers("GET", path)
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
             data = response.json()
+            
             if data.get("code") == "0":
                 details = data["data"][0]["details"]
                 for detail in details:
                     if detail["ccy"] == "USDT":
-                        return float(detail.get("availBal", 0))
+                        # قراءة الرصيد المتاح للتداول الفوري
+                        avail = float(detail.get("availBal", 0))
+                        if avail == 0:
+                            # احتياطي لو الرصيد مسجل تحت الرصيد الكلي المتاح
+                            avail = float(detail.get("cashBal", 0))
+                        return avail
             return 0.0
         except Exception as e:
             print(f"[ERROR] Balance fetch failed: {e}")
@@ -148,7 +156,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام يعمل الآن بأعلى معايير الدقة والتأكيد التام...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام متصل بحساب التداول ويقرأ الرصيد الفوري...")
         while True:
             try:
                 current_price = self.get_ticker_price()
@@ -157,11 +165,11 @@ class InstitutionalBot:
                     continue
 
                 avail_balance = self.get_balance()
-                print(f"[SCANNER] السعر الحالي: {current_price} | الرصد المتاح: {avail_balance:.2f} USDT")
+                print(f"[SCANNER] السعر الحالي: {current_price} | الرصيد المتاح في التداول: {avail_balance:.2f} USDT")
 
                 if not self.position:
                     if avail_balance < 10:
-                        print("[WAITING] الرصد الحر غير كافٍ.")
+                        print("[WAITING] الرصيد المتاح أقل من الحد الأدنى للصفقة.")
                         time.sleep(30)
                         continue
 
@@ -206,7 +214,7 @@ class InstitutionalBot:
                         time.sleep(10)
                         continue
 
-                    # 2. التعافي الذكي (DCA) مع التأكد التام من تنفيذ أمر التعزيز قبل تحديث المتوسطات
+                    # 2. التعافي الذكي (DCA)
                     if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
                         print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز وبانتظار التنفيذ...")
                         avail_balance = self.get_balance()
