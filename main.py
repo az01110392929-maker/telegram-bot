@@ -55,18 +55,23 @@ class MultiAssetInstitutionalBot:
             data = response.json()
             
             if data.get("code") == "0" and data.get("data"):
+                # قراءة إجمالي رأس المال الموحد (Total Equity) مباشرة
+                total_eq = float(data["data"][0].get("totalEq", 0))
+                if total_eq > 0:
+                    return total_eq
+                
                 details = data["data"][0].get("details", [])
                 for detail in details:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        total_avail = avail if avail > 0 else cash
-                        if total_avail > 0:
-                            return total_avail
-            return 0.0
+                        eq = float(detail.get("eq", 0))
+                        val = max(avail, cash, eq)
+                        if val > 0:
+                            return val
         except Exception as e:
-            print(f"[ERROR] Balance fetch failed: {e}")
-            return 0.0
+            print(f"[ERROR] Live balance fetch failed: {e}")
+        return 0.0
 
     def get_ticker_price(self, symbol):
         try:
@@ -215,7 +220,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالقراءة الحية المباشرة للحساب الموحد...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -279,7 +284,7 @@ class MultiAssetInstitutionalBot:
                             self.positions[symbol] = None
                             time.sleep(5)
 
-                # 2. البحث عن فرص جديدة
+                # 2. البحث عن فرص جديدة بالرصيد الحي الحقيقي
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
