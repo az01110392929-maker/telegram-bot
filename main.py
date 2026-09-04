@@ -3,6 +3,7 @@ import time
 import hmac
 import hashlib
 import base64
+import json
 import requests
 from datetime import datetime
 
@@ -31,8 +32,16 @@ class InstitutionalBot:
         self.order_id = None
 
     def get_signed_headers(self, method, request_path, body=""):
+        """توقيع طلبات OKX بدقة متناهية لمنع خطأ Signature Error"""
         timestamp = datetime.utcnow().isoformat() + "Z"
-        message = timestamp + method.upper() + request_path + body
+        
+        # التأكد من أن الـ body يتم تحويله لنص JSON مضغوط بدون مسافات تماماً كما تتطلب المنصة
+        if isinstance(body, dict):
+            body_str = json.dumps(body, separators=(',', ':')) if body else ""
+        else:
+            body_str = body
+
+        message = timestamp + method.upper() + request_path + body_str
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
         sign = base64.b64encode(mac.digest()).decode('utf-8')
         return {
@@ -46,7 +55,6 @@ class InstitutionalBot:
     def get_balance(self):
         """جلب الرصيد المتاح مباشرة من حساب التداول (Trading / Spot)"""
         try:
-            # مسار جلب الأصول لحساب التداول المباشر
             path = "/api/v5/account/balance?ccy=USDT"
             headers = self.get_signed_headers("GET", path)
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
@@ -56,10 +64,8 @@ class InstitutionalBot:
                 details = data["data"][0]["details"]
                 for detail in details:
                     if detail["ccy"] == "USDT":
-                        # قراءة الرصيد المتاح للتداول الفوري
                         avail = float(detail.get("availBal", 0))
                         if avail == 0:
-                            # احتياطي لو الرصيد مسجل تحت الرصيد الكلي المتاح
                             avail = float(detail.get("cashBal", 0))
                         return avail
             return 0.0
@@ -129,7 +135,9 @@ class InstitutionalBot:
                 "px": str(round(execution_price, 2)),
                 "sz": str(size_btc)
             }
-            headers = self.get_signed_headers("POST", path, str(body))
+            
+            # تمرير الـ body بالكامل كـ dict لتوليد التوقيع الصحيح و إرساله كـ JSON
+            headers = self.get_signed_headers("POST", path, body)
             res = requests.post(BASE_URL + path, headers=headers, json=body, timeout=10).json()
             
             if res.get("code") == "0":
@@ -156,7 +164,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام متصل بحساب التداول ويقرأ الرصيد الفوري...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام مصحح رياضياً ومحمي ضد خطأ التوقيع...")
         while True:
             try:
                 current_price = self.get_ticker_price()
