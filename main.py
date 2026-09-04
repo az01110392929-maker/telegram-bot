@@ -4,37 +4,36 @@ import math
 import os
 import sys
 
-# استخراج متغيرات البيئة بدقة تامة وبكل الاختصارات المحتملة
+# جلب المتغيرات البيئية بدقة
 okx_api = os.getenv('OKX_API_KEY') or os.getenv('OKX_API')
 okx_secret = os.getenv('OKX_SECRET_KEY') or os.getenv('OKX_SECRET')
 okx_pass = os.getenv('OKX_PASSWORD') or os.getenv('OKX_PASS') or os.getenv('OKX_PAS')
 
-# إعدادات الاتصال المتقدمة بمنصة OKX
+# إعدادات الاتصال الإجبارية لمنصة OKX مع تمرير كلمة المرور بوضوح تام
 exchange = ccxt.okx({
     'apiKey': okx_api,
     'secret': okx_secret,
     'password': okx_pass,
     'enableRateLimit': True,
-    'options': {'defaultType': 'spot'}  # التداول الفوري المعتمد
+    'options': {
+        'defaultType': 'spot',
+        'adjustForTimeDifference': True
+    }
 })
 
-# الأزواج المعتمدة لأعلى سيولة مؤسسية
 SYMBOLS = ['BTC/USDT', 'ETH/USDT']
-
-# الإعدادات الهندسية المتقدمة لإدارة المخاطر ورأس المال
-BASE_MAX_ALLOCATION_PCT = 0.80  # الحد الأقصى لتخصيص الرصيد الذكي
-TRAILING_DROP_PCT = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
-DCA_THRESHOLD_PCT = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
+BASE_MAX_ALLOCATION_PCT = 0.80
+TRAILING_DROP_PCT = 0.002
+DCA_THRESHOLD_PCT = 0.0015
 
 def safe_api_call(func, *args, **kwargs):
-    """نظام الحماية وإعادة المحاولة التلقائية عند انقطاع الشبكة (Circuit Breaker)"""
     max_retries = 5
     delay = 2
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f"تنبيه اتصال شبكي (محاولة {attempt + 1}/{max_retries}): {e}")
+            print(f"تنبيه اتصال (محاولة {attempt + 1}/{max_retries}): {e}")
             if attempt == max_retries - 1:
                 raise e
             time.sleep(delay)
@@ -42,7 +41,6 @@ def safe_api_call(func, *args, **kwargs):
 
 def get_balance(currency='USDT'):
     try:
-        # الاتصال الآمن المباشر لجلب الأرصدة بدون تعقيد المعاملات
         balance = safe_api_call(exchange.fetch_balance)
         return float(balance['free'].get(currency, 0))
     except Exception as e:
@@ -54,14 +52,10 @@ def get_market_price(symbol):
         ticker = safe_api_call(exchange.fetch_ticker, symbol)
         return float(ticker['last'])
     except Exception as e:
-        print(f"خطأ في جلب السعر اللحظي لـ {symbol}: {e}")
+        print(f"خطأ في جلب سعر {symbol}: {e}")
         return None
 
 def institutional_market_analysis(symbol):
-    """
-    تحليل مؤسسي متكامل: تصفية جدران التلاعب (Spoofing)، 
-    توافق الأطر الزمنية (15m + 1h)، ومؤشر ATR الديناميكي
-    """
     try:
         order_book = safe_api_call(exchange.fetch_order_book, symbol, limit=50)
         bids = order_book['bids']
@@ -135,7 +129,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
     highest_price = initial_entry_price
     trailing_active = False
 
-    print(f"بدء المراقبة المؤسسية لـ {symbol} | الدخول: {initial_entry_price} | الهدف: {target_tp_pct*100:.2f}%")
+    print(f"بدء المراقبة لـ {symbol} | الدخول: {initial_entry_price}")
 
     while True:
         try:
@@ -188,7 +182,7 @@ def monitor_trade(symbol, initial_entry_price, initial_amount, target_tp_pct, ta
             time.sleep(5)
 
 def run_bot():
-    print("=== تشغيل البوت المؤسسي بنجاح واستقرار تام ===")
+    print("=== تشغيل البوت المؤسسي مع الاعتماد الكامل للـ Passphrase ===")
     
     while True:
         try:
