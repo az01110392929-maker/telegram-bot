@@ -31,7 +31,6 @@ class InstitutionalBot:
         self.order_id = None
 
     def get_signed_headers(self, method, request_path, body=""):
-        """طريقة التوقيع الأصلية المستقرة والموثوقة تماماً مع OKX"""
         timestamp = datetime.utcnow().isoformat() + "Z"
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
@@ -45,21 +44,23 @@ class InstitutionalBot:
         }
 
     def get_balance(self):
-        """جلب الرصيد المتاح مباشرة من حساب التداول (Trading / Spot)"""
+        """جلب الرصيد الشامل وفحص العملات المتاحة بدقة لضمان ظهور الرصيد الحقيقي"""
         try:
-            path = "/api/v5/account/balance?ccy=USDT"
+            path = "/api/v5/account/balance"
             headers = self.get_signed_headers("GET", path)
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
             data = response.json()
             
-            if data.get("code") == "0":
-                details = data["data"][0]["details"]
+            if data.get("code") == "0" and data.get("data"):
+                details = data["data"][0].get("details", [])
                 for detail in details:
-                    if detail["ccy"] == "USDT":
+                    if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
-                        if avail == 0:
-                            avail = float(detail.get("cashBal", 0))
-                        return avail
+                        cash = float(detail.get("cashBal", 0))
+                        # اختيار القيمة المتاحة فعلياً للتداول
+                        total_avail = avail if avail > 0 else cash
+                        if total_avail > 0:
+                            return total_avail
             return 0.0
         except Exception as e:
             print(f"[ERROR] Balance fetch failed: {e}")
@@ -128,7 +129,6 @@ class InstitutionalBot:
                 "sz": str(size_btc)
             }
             
-            # تحويل البودي لنص بالطريقة الأصلية السليمة تماماً للتوقيع
             import json
             body_str = json.dumps(body)
             headers = self.get_signed_headers("POST", path, body_str)
@@ -158,7 +158,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام يعمل بالطريقة الأصلية المستقرة...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز لفحص الأرصدة الشاملة...")
         while True:
             try:
                 current_price = self.get_ticker_price()
@@ -167,7 +167,7 @@ class InstitutionalBot:
                     continue
 
                 avail_balance = self.get_balance()
-                print(f"[SCANNER] السعر الحالي: {current_price} | الرصيد المتاح في التداول: {avail_balance:.2f} USDT")
+                print(f"[SCANNER] السعر الحالي: {current_price} | الرصيد المتاح في الحساب: {avail_balance:.2f} USDT")
 
                 if not self.position:
                     if avail_balance < 10:
@@ -208,7 +208,6 @@ class InstitutionalBot:
 
                     print(f"[MONITORING] المتوسط: {self.entry_price:.2f} | الحالي: {current_price} | الربح/الخسارة: {pnl_pct*100:.2f}%")
 
-                    # 1. وقف الخسارة
                     if drawdown_pct >= STOP_LOSS_PCT:
                         print("[STOP LOSS] تفعيل وقف الخسارة الطارئ وحماية رأس المال...")
                         self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
@@ -216,7 +215,6 @@ class InstitutionalBot:
                         time.sleep(10)
                         continue
 
-                    # 2. التعافي الذكي (DCA)
                     if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
                         print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز وبانتظار التنفيذ...")
                         avail_balance = self.get_balance()
@@ -245,7 +243,6 @@ class InstitutionalBot:
                                 else:
                                     print("[DCA TIMEOUT] لم يتم تنفيذ أمر التعزيز في الوقت المحدد، تم تخطيه بأمان.")
 
-                    # 3. جني الأرباح التتبعي (Trailing TP)
                     peak_drawdown = (self.highest_price - current_price) / self.highest_price
                     if pnl_pct >= 0.008 and peak_drawdown >= TRAILING_CALLBACK:
                         print(f"[TAKE PROFIT] جني الأرباح عند القمة: {self.highest_price}")
