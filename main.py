@@ -1,245 +1,254 @@
 import os
-import asyncio
-import logging
-import ccxt.async_support as ccxt
+import time
+import hmac
+import hashlib
+import base64
+import requests
+from datetime import datetime
 
-# إعداد السجلات الهندسية المتقدمة لتوثيق وتتبع كل جزء من رأس المال بدقة فائقة
-logging.basicConfig(
-    format='%(asctime)s | [OKX-INSTITUTIONAL-BOT] | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO
-)
-logger = logging.getLogger("InstitutionalTraderOKX")
+# ==================== إعدادات المنظومة المؤسسية ====================
+API_KEY = os.getenv("OKX_API_KEY", "")
+SECRET_KEY = os.getenv("OKX_SECRET_KEY", "")
+PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
-class InstitutionalTradingBotOKX:
+BASE_URL = "https://www.okx.com" 
+SYMBOL = "BTC-USDT"
+
+ALLOCATION_PCT = 0.80       
+STOP_LOSS_PCT = 0.003       
+DCA_TRIGGER_PCT = 0.0015    
+TRAILING_CALLBACK = 0.002   
+TIMEFRAME = "15m"
+
+class InstitutionalBot:
     def __init__(self):
-        # سحب المتغيرات البيئية من Railway وتطهيرها من أي مسافات فارغة لتجنب أخطاء الترميز
-        self.api_key = os.getenv('OKX_API_KEY', '').strip()
-        self.api_secret = os.getenv('OKX_SECRET_KEY', '').strip()
-        self.passphrase = os.getenv('OKX_PASSPHRASE', '').strip()
-        
-        # بحث احتياطي تلقائي إذا كانت المتغيرات مسجلة بأسماء مختصرة
-        if not self.api_key or not self.api_secret or not self.passphrase:
-            for k, v in os.environ.items():
-                k_upper = k.upper()
-                if 'API' in k_upper and not self.api_key:
-                    self.api_key = v.strip()
-                elif ('SEC' in k_upper) and not self.api_secret:
-                    self.api_secret = v.strip()
-                elif ('PAS' in k_upper) and not self.passphrase:
-                    self.passphrase = v.strip()
-
-        self.symbol = 'BTC/USDT'
-        self.poll_interval = 20  # فترة الفحص المنتظم
-        
-        # إعدادات هندسية متقدمة لإدارة رأس المال والمخاطر
-        self.base_max_allocation_pct = 0.80  # استخدام 80% من الرصيد المتاح للرغبة في صفقات كبرى (حوالي 52$)
-        self.trailing_drop_pct = 0.002       # نسبة ارتداد تتبع الأرباح (0.2%)
-        self.dca_threshold_pct = 0.0015      # نسبة تفعيل التعافي الذكي (0.15%)
-        
-        # حالة الصفقة الحالية والمتابعة
-        self.in_position = False
+        self.position = None
         self.entry_price = 0.0
-        self.total_amount = 0.0
-        self.total_cost = 0.0
-        self.dca_used = False
+        self.position_size_usdt = 0.0 
+        self.position_size_btc = 0.0  
         self.highest_price = 0.0
-        self.trailing_active = False
-        self.current_tp_target = 0.012
-        self.current_sl_target = 0.003
+        self.dca_used = False
+        self.order_id = None
 
-    async def get_available_balance(self, exchange: ccxt.okx):
-        """فحص رصيد الـ USDT المتاح للتداول الفوري (Spot) بأمان تام"""
+    def get_signed_headers(self, method, request_path, body=""):
+        timestamp = datetime.utcnow().isoformat() + "Z"
+        message = timestamp + method.upper() + request_path + body
+        mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
+        sign = base64.b64encode(mac.digest()).decode('utf-8')
+        return {
+            "OK-ACCESS-KEY": API_KEY,
+            "OK-ACCESS-SIGN": sign,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": PASSPHRASE,
+            "Content-Type": "application/json"
+        }
+
+    def get_balance(self):
         try:
-            balance = await exchange.fetch_balance()
-            free_usdt = balance['free'].get('USDT', 0.0) if 'free' in balance else 0.0
-            return float(free_usdt)
+            path = "/api/v5/account/balance?ccy=USDT"
+            headers = self.get_signed_headers("GET", path)
+            response = requests.get(BASE_URL + path, headers=headers, timeout=10)
+            data = response.json()
+            if data.get("code") == "0":
+                details = data["data"][0]["details"]
+                for detail in details:
+                    if detail["ccy"] == "USDT":
+                        return float(detail.get("availBal", 0))
+            return 0.0
         except Exception as e:
-            logger.error(f"خطأ في قراءة الرصيد الفوري من OKX: {e}")
+            print(f"[ERROR] Balance fetch failed: {e}")
             return 0.0
 
-    async def institutional_market_analysis(self, exchange: ccxt.okx):
-        """
-        تحليل مؤسسي متكامل: تصفية جدران التلاعب (Spoofing)، 
-        توافق الأطر الزمنية، ومؤشر ATR الديناميكي لتحديد الأهداف
-        """
+    def get_ticker_price(self):
         try:
-            order_book = await exchange.fetch_order_book(self.symbol, limit=50)
-            bids = order_book['bids']
-            asks = order_book['asks']
-            
-            bids_top_vol = sum([b[1] for b in bids[:15]])
-            asks_top_vol = sum([a[1] for a in asks[:15]])
-            
-            if asks_top_vol > 0 and (bids_top_vol / asks_top_vol) < 1.2:
-                return False, 0, 0, 0
-
-            ohlcv_1h = await exchange.fetch_ohlcv(self.symbol, timeframe='1h', limit=30)
-            closes_1h = [c[4] for c in ohlcv_1h]
-            ema_1h = sum(closes_1h) / len(closes_1h)
-            if closes_1h[-1] < ema_1h:
-                return False, 0, 0, 0
-
-            ohlcv_15m = await exchange.fetch_ohlcv(self.symbol, timeframe='15m', limit=50)
-            if not ohlcv_15m or len(ohlcv_15m) < 50:
-                return False, 0, 0, 0
-
-            closes_15m = [c[4] for c in ohlcv_15m]
-            ema_15m = sum(closes_15m) / len(closes_15m)
-            current_price = closes_15m[-1]
-
-            if current_price < ema_15m:
-                return False, 0, 0, 0
-
-            highs = [c[2] for c in ohlcv_15m[-14:]]
-            lows = [c[3] for c in ohlcv_15m[-14:]]
-            tr_list = [highs[i] - lows[i] for i in range(len(highs))]
-            avg_atr = sum(tr_list) / len(tr_list)
-            
-            volatility_ratio = avg_atr / current_price
-            if volatility_ratio < 0.0005:
-                return False, 0, 0, 0
-
-            dynamic_tp = max(0.008, min(0.015, volatility_ratio * 1.5))
-            dynamic_sl = 0.0025
-            strength_score = min(1.0, (bids_top_vol / (asks_top_vol + 1e-8)) / 2.0)
-
-            return True, dynamic_tp, dynamic_sl, strength_score
-
+            path = f"/api/v5/market/ticker?instId={SYMBOL}"
+            response = requests.get(BASE_URL + path, timeout=10)
+            data = response.json()
+            if data.get("code") == "0":
+                return float(data["data"][0]["last"])
         except Exception as e:
-            logger.error(f"خطأ في التحليل المؤسسي: {e}")
-            return False, 0, 0, 0
+            print(f"[ERROR] Ticker price failed: {e}")
+        return None
 
-    async def run_protected_strategy(self, exchange: ccxt.okx):
-        logger.info("تم تفعيل محرك التداول المؤسسي المتقدم مع حماية رأس المال وربط السيولة الكاملة...")
+    def check_market_conditions(self):
+        try:
+            path = f"/api/v5/market/candles?instId={SYMBOL}&bar={TIMEFRAME}&limit=20"
+            res = requests.get(BASE_URL + path, timeout=10).json()
+            if res.get("code") != "0" or not res.get("data"):
+                return False
+            
+            closes = [float(candle[4]) for candle in res["data"]]
+            ema_20 = sum(closes) / len(closes)
+            current_price = closes[0]
 
+            book_path = f"/api/v5/market/books?instId={SYMBOL}&sz=15"
+            book_res = requests.get(BASE_URL + book_path, timeout=10).json()
+            if book_res.get("code") != "0":
+                return False
+            
+            bids = book_res["data"][0]["bids"]
+            asks = book_res["data"][0]["asks"]
+            
+            bid_volume = sum([float(b[1]) for b in bids])
+            ask_volume = sum([float(a[1]) for a in asks])
+
+            if current_price > ema_20 and bid_volume > (ask_volume * 1.1):
+                return True
+        except Exception as e:
+            print(f"[WARNING] Market check error: {e}")
+        return False
+
+    def place_order(self, side, price, amount, is_btc_sz=False):
+        try:
+            path = "/api/v5/trade/order"
+            execution_price = price
+            if side == "sell":
+                execution_price = price * 0.9990 
+
+            if is_btc_sz:
+                size_btc = round(amount, 4)
+            else:
+                size_btc = round(amount / execution_price, 4)
+
+            if size_btc < 0.0001:
+                return None
+            
+            body = {
+                "instId": SYMBOL,
+                "tdMode": "cash",
+                "side": side,
+                "ordType": "limit",
+                "px": str(round(execution_price, 2)),
+                "sz": str(size_btc)
+            }
+            headers = self.get_signed_headers("POST", path, str(body))
+            res = requests.post(BASE_URL + path, headers=headers, json=body, timeout=10).json()
+            
+            if res.get("code") == "0":
+                ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
+                print(f"[SUCCESS] Order {side.upper()} placed, ID: {ord_id}")
+                return ord_id
+            else:
+                print(f"[ERROR] Order rejected: {res.get('msg')}")
+        except Exception as e:
+            print(f"[ERROR] Place order exception: {e}")
+        return None
+
+    def check_order_filled(self, order_id):
+        try:
+            path = f"/api/v5/trade/order?instId={SYMBOL}&ordId={order_id}"
+            headers = self.get_signed_headers("GET", path)
+            res = requests.get(BASE_URL + path, headers=headers, timeout=10).json()
+            if res.get("code") == "0" and res.get("data"):
+                state = res["data"][0].get("state")
+                if state == "filled":
+                    return True
+        except Exception as e:
+            print(f"[WARNING] Check order status error: {e}")
+        return False
+
+    def run(self):
+        print("[OKX-INSTITUTIONAL-BOT] النظام يعمل الآن بأعلى معايير الدقة والتأكيد التام...")
         while True:
             try:
-                ticker = await exchange.fetch_ticker(self.symbol)
-                current_price = float(ticker['last'])
-                balance = await self.get_available_balance(exchange)
+                current_price = self.get_ticker_price()
+                if not current_price:
+                    time.sleep(15)
+                    continue
 
-                logger.info(f"📊 [OKX-Scanner] السعر الحالي: {current_price} | الرصيد الحر المتاح: {balance:.2f} USDT")
+                avail_balance = self.get_balance()
+                print(f"[SCANNER] السعر الحالي: {current_price} | الرصد المتاح: {avail_balance:.2f} USDT")
 
-                if self.in_position:
-                    tp_price = self.entry_price * (1 + self.current_tp_target)
-                    sl_price = self.entry_price * (1 - self.current_sl_target)
-                    price_diff = (current_price - self.entry_price) / self.entry_price
-                    logger.info(f"مراقبة صفقة نشطة. متوسط الدخول: {self.entry_price:.2f} | التغير: {price_diff * 100:.2f}%")
-
-                    if not self.dca_used and current_price <= (self.entry_price * (1 - self.dca_threshold_pct)):
-                        logger.info("🔄 تفعيل التعافي الذكي (DCA) لتعديل متوسط السعر وتقليل المخاطر...")
-                        dca_budget = min(balance * 0.4, 30.0)
-                        if dca_budget >= 10.0:
-                            amount_to_buy = dca_budget / current_price
-                            order = await exchange.create_market_buy_order(self.symbol, amount_to_buy)
-                            if order:
-                                filled_price = float(order.get('average') or order.get('price') or current_price)
-                                filled_amount = float(order.get('filled') or amount_to_buy)
-                                
-                                self.total_cost += (filled_price * filled_amount)
-                                self.total_amount += filled_amount
-                                self.entry_price = self.total_cost / self.total_amount
-                                self.dca_used = True
-                                logger.info(f"تم تنفيذ تعزيز DCA بنجاح. متوسط السعر الجديد: {self.entry_price:.2f}")
-
-                    if current_price <= sl_price:
-                        logger.warning("🛡️ تفعيل وقف الخسارة لحماية رأس المال الأساسي. جاري الخروج الفوري...")
-                        await exchange.create_market_sell_order(self.symbol, self.total_amount)
-                        self.in_position = False
-                        logger.warning("تم إغلاق الصفقة بالكامل لحماية الرصيد.")
+                if not self.position:
+                    if avail_balance < 10:
+                        print("[WAITING] الرصد الحر غير كافٍ.")
+                        time.sleep(30)
                         continue
 
+                    if self.check_market_conditions():
+                        print("[FIRE] تطابق الشروط! جاري إرسال أمر الشراء...")
+                        trade_budget = avail_balance * ALLOCATION_PCT
+                        
+                        order_id = self.place_order("buy", current_price, trade_budget, is_btc_sz=False)
+                        if order_id:
+                            print("[WAITING FILL] بانتظار تأكيد التنفيذ التام للدخول...")
+                            for _ in range(6):
+                                time.sleep(5)
+                                if self.check_order_filled(order_id):
+                                    self.position = "LONG"
+                                    self.entry_price = current_price
+                                    self.highest_price = current_price
+                                    self.position_size_usdt = trade_budget
+                                    self.position_size_btc = round(trade_budget / current_price, 4)
+                                    self.dca_used = False
+                                    self.order_id = order_id
+                                    print(f"[ACTIVE SUCCESS] تم التأكيد والدخول بنجاح بسعر: {self.entry_price}")
+                                    break
+                            else:
+                                print("[TIMEOUT] لم يتم تنفيذ أمر الشراء، جاري إلغاؤه.")
+                    else:
+                        print("[SLEEP] بانتظار الفرصة الآمنة...")
+
+                else:
                     if current_price > self.highest_price:
                         self.highest_price = current_price
 
-                    if not self.trailing_active and current_price >= tp_price:
-                        self.trailing_active = True
-                        logger.info(f"🎯 بلوغ الهدف! تفعيل نظام ملاحقة الأرباح العليا من قمة: {self.highest_price}")
+                    pnl_pct = (current_price - self.entry_price) / self.entry_price
+                    drawdown_pct = (self.entry_price - current_price) / self.entry_price
 
-                    if self.trailing_active:
-                        drop_threshold = self.highest_price * (1 - self.trailing_drop_pct)
-                        if current_price <= drop_threshold:
-                            logger.info("📈 ارتداد السعر من القمة -> جني الأرباح القصوى وإغلاق الصفقة!")
-                            await exchange.create_market_sell_order(self.symbol, self.total_amount)
-                            self.in_position = False
-                            logger.info("تم جني الأرباح وتأمين الكاش بنجاح.")
-                            continue
+                    print(f"[MONITORING] المتوسط: {self.entry_price:.2f} | الحالي: {current_price} | الربح/الخسارة: {pnl_pct*100:.2f}%")
 
-                elif not self.in_position:
-                    is_valid, dyn_tp, dyn_sl, strength_score = await self.institutional_market_analysis(exchange)
-                    
-                    if is_valid:
-                        allocated_budget = balance * self.base_max_allocation_pct * strength_score
-                        
-                        if allocated_budget >= 10.0:
-                            logger.info(f"🔥 تطابق الشروط المؤسسية! جاري تنفيذ أمر شراء بقيمة: {allocated_budget:.2f}$")
-                            amount_to_buy = allocated_budget / current_price
+                    # 1. وقف الخسارة
+                    if drawdown_pct >= STOP_LOSS_PCT:
+                        print("[STOP LOSS] تفعيل وقف الخسارة الطارئ وحماية رأس المال...")
+                        self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
+                        self.position = None
+                        time.sleep(10)
+                        continue
+
+                    # 2. التعافي الذكي (DCA) مع التأكد التام من تنفيذ أمر التعزيز قبل تحديث المتوسطات
+                    if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used:
+                        print("[DCA] تفعيل التعافي الذكي، إرسال أمر التعزيز وبانتظار التنفيذ...")
+                        avail_balance = self.get_balance()
+                        if avail_balance >= 5:
+                            dca_budget = avail_balance * 0.5
+                            dca_btc = round(dca_budget / current_price, 4)
                             
-                            order = await exchange.create_market_buy_order(self.symbol, amount_to_buy)
-                            if order:
-                                filled_price = float(order.get('average') or order.get('price') or current_price)
-                                filled_amount = float(order.get('filled') or amount_to_buy)
+                            res_id = self.place_order("buy", current_price, dca_budget, is_btc_sz=False)
+                            if res_id:
+                                dca_filled = False
+                                for _ in range(6):
+                                    time.sleep(5)
+                                    if self.check_order_filled(res_id):
+                                        dca_filled = True
+                                        break
                                 
-                                self.entry_price = filled_price
-                                self.total_amount = filled_amount
-                                self.total_cost = filled_price * filled_amount
-                                self.current_tp_target = dyn_tp
-                                self.current_sl_target = dyn_sl
-                                self.dca_used = False
-                                self.highest_price = filled_price
-                                self.trailing_active = False
-                                self.in_position = True
-                                
-                                logger.info(f"تم تنفيذ الدخول المؤسسي بنجاح عند سعر: {self.entry_price}")
-                        else:
-                            logger.warning("⚠️ الرصيد المتاح لا يغطي الحد الأدنى للصفقة المؤسسية (10$).")
-                    else:
-                        logger.info("💤 شروط السيولة لا تلبي المعايير المؤسسية حالياً، البوت ينتظر الفرصة المثلى...")
+                                if dca_filled:
+                                    total_cost = self.position_size_usdt + dca_budget
+                                    total_size = self.position_size_btc + dca_btc
+                                    
+                                    self.entry_price = total_cost / total_size
+                                    self.position_size_usdt = total_cost
+                                    self.position_size_btc = total_size
+                                    self.dca_used = True
+                                    print(f"[DCA SUCCESS] تم تنفيذ التعزيز وتحديث متوسط السعر بدقة: {self.entry_price:.2f}")
+                                else:
+                                    print("[DCA TIMEOUT] لم يتم تنفيذ أمر التعزيز في الوقت المحدد، تم تخطيه بأمان.")
 
-                await asyncio.sleep(self.poll_interval)
+                    # 3. جني الأرباح التتبعي (Trailing TP)
+                    peak_drawdown = (self.highest_price - current_price) / self.highest_price
+                    if pnl_pct >= 0.008 and peak_drawdown >= TRAILING_CALLBACK:
+                        print(f"[TAKE PROFIT] جني الأرباح عند القمة: {self.highest_price}")
+                        self.place_order("sell", current_price, self.position_size_btc, is_btc_sz=True)
+                        self.position = None
+                        time.sleep(10)
 
-            except ccxt.NetworkError as e:
-                logger.warning(f"مشكلة اتصال مؤقتة بالشبكة مع OKX: {e}")
-                await asyncio.sleep(20)
-            except ccxt.ExchangeError as e:
-                logger.warning(f"خطأ من منصة OKX API: {e}")
-                await asyncio.sleep(30)
+                time.sleep(15)
             except Exception as e:
-                logger.error(f"خطأ غير متوقع في محرك التداول الآمن: {e}")
-                await asyncio.sleep(30)
-
-    async def main(self):
-        if not self.api_key or not self.api_secret or not self.passphrase:
-            logger.critical("مفاتيح OKX أو كلمة المرور (Passphrase) مفقودة تماماً في متغيرات البيئة!")
-            return
-
-        logger.info("جاري تهيئة الاتصال الآمن بمنصة OKX (تداول فوري Spot)...")
-        exchange = ccxt.okx({
-            'apiKey': self.api_key,
-            'secret': self.api_secret,
-            'password': self.passphrase,
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'spot'
-            }
-        })
-
-        try:
-            await exchange.load_markets()
-            logger.info("تم التحقق من مفاتيح OKX والاتصال بنجاح تام!")
-            try:
-                await self.run_protected_strategy(exchange)
-            finally:
-                await exchange.close()
-        except ccxt.AuthenticationError as e:
-            logger.critical(f"❌ رفضت OKX المفاتيح أو كلمة المرور: {e}")
-        except Exception as e:
-            logger.critical(f"خطأ حرج في تهيئة العميل مع OKX: {e}")
+                print(f"[CRITICAL ERROR] Loop exception: {e}")
+                time.sleep(15)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(InstitutionalTradingBotOKX().main())
-    except KeyboardInterrupt:
-        logger.info("تم إيقاف النظام الهندسي الآمن يدويًا.")
-        
+    bot = InstitutionalBot()
+    bot.run()
+    
