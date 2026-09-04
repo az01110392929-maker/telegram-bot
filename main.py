@@ -60,7 +60,8 @@ class MultiAssetInstitutionalBot:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        total_avail = avail if avail > 0 else cash
+                        eq = float(detail.get("eq", 0))
+                        total_avail = max(avail, cash, eq)
                         if total_avail > 0:
                             return total_avail
             return 0.0
@@ -215,7 +216,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بالتحديث التلقائي الشامل...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -279,7 +280,7 @@ class MultiAssetInstitutionalBot:
                             self.positions[symbol] = None
                             time.sleep(5)
 
-                # 2. البحث عن فرص جديدة باستخدام القراءة الحية والديناميكية لإجمالي المحفظة
+                # 2. البحث عن فرص جديدة
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
@@ -294,7 +295,6 @@ class MultiAssetInstitutionalBot:
 
                         if self.check_market_conditions(symbol):
                             print(f"[FIRE] تطابق الشروط على العملة {symbol}! جاري التنفيذ...")
-                            # التعديل الأخير المطبق: قراءة إجمالي المحفظة الحية وتوزيعها ديناميكياً على 3
                             trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
                             
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
@@ -328,4 +328,4 @@ class MultiAssetInstitutionalBot:
 if __name__ == "__main__":
     bot = MultiAssetInstitutionalBot()
     bot.run()
-                            
+    
