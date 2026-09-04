@@ -2,6 +2,7 @@ import os
 import time
 import hmac
 import hashlib
+import base64
 import requests
 from datetime import datetime, timezone
 
@@ -37,7 +38,8 @@ class MultiAssetInstitutionalBot:
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        sign = mac.digest().hex()
+        # السر الأول: استخدام base64 تماماً مثل الكود القديم الناجح
+        sign = base64.b64encode(mac.digest()).decode('utf-8')
         return {
             "OK-ACCESS-KEY": API_KEY,
             "OK-ACCESS-SIGN": sign,
@@ -48,11 +50,10 @@ class MultiAssetInstitutionalBot:
 
     def get_balance(self):
         try:
+            # السر الثاني: المسار النظيف بدون بارامترات تماماً مثل الكود القديم
             path = "/api/v5/account/balance"
-            params = "?ccy=USDT"
-            full_path = path + params
-            headers = self.get_signed_headers("GET", full_path)
-            response = requests.get(BASE_URL + full_path, headers=headers, timeout=10)
+            headers = self.get_signed_headers("GET", path)
+            response = requests.get(BASE_URL + path, headers=headers, timeout=10)
             data = response.json()
             
             if data.get("code") == "0" and data.get("data"):
@@ -61,10 +62,9 @@ class MultiAssetInstitutionalBot:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        eq = float(detail.get("eq", 0))
-                        val = max(avail, cash, eq)
-                        if val > 0:
-                            return val
+                        total_avail = avail if avail > 0 else cash
+                        if total_avail > 0:
+                            return total_avail
             return 0.0
         except Exception as e:
             print(f"[ERROR] Balance fetch failed: {e}")
@@ -217,7 +217,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متصل وجاهز بالتعديل النهائي للرصيد...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بالطريقة الأصلية الناجحة...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -281,7 +281,7 @@ class MultiAssetInstitutionalBot:
                             self.positions[symbol] = None
                             time.sleep(5)
 
-                # 2. البحث عن فرص جديدة بالرصيد الحقيقي الحي
+                # 2. البحث عن فرص جديدة بالرصيد الحي المباشر
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
@@ -329,4 +329,4 @@ class MultiAssetInstitutionalBot:
 if __name__ == "__main__":
     bot = MultiAssetInstitutionalBot()
     bot.run()
-
+    
