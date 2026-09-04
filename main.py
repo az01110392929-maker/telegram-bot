@@ -44,7 +44,6 @@ class InstitutionalBot:
         }
 
     def get_balance(self):
-        """جلب الرصيد الشامل وفحص العملات المتاحة بدقة لضمان ظهور الرصيد الحقيقي"""
         try:
             path = "/api/v5/account/balance"
             headers = self.get_signed_headers("GET", path)
@@ -57,7 +56,6 @@ class InstitutionalBot:
                     if detail.get("ccy") == "USDT":
                         avail = float(detail.get("availBal", 0))
                         cash = float(detail.get("cashBal", 0))
-                        # اختيار القيمة المتاحة فعلياً للتداول
                         total_avail = avail if avail > 0 else cash
                         if total_avail > 0:
                             return total_avail
@@ -158,7 +156,7 @@ class InstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز لفحص الأرصدة الشاملة...")
+        print("[OKX-INSTITUTIONAL-BOT] النظام متصل وجاهز بربط الحساب الرئيسي...")
         while True:
             try:
                 current_price = self.get_ticker_price()
