@@ -16,6 +16,7 @@ BASE_URL = "https://www.okx.com"
 SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
+MAX_SINGLE_ASSET_PCT = 0.33 # الحد الأقصى لحصة العملة الواحدة من إجمالي المحفظة (33%)
 STOP_LOSS_PCT = 0.003       
 DCA_TRIGGER_PCT = 0.0015    
 TRAILING_CALLBACK = 0.001   
@@ -215,9 +216,14 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بانتظام وبفحص كل {CHECK_INTERVAL} ثوانٍ...")
+        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بانتظام وبفحص كل {CHECK_INTERVAL} ثوانٍ (مع حماية التركز)...")
         while True:
             try:
+                # حساب إجمالي المحفظة بدقة
+                avail_balance = self.get_balance()
+                active_positions_value = sum(self.position_sizes_usdt.values())
+                total_portfolio_value = avail_balance + active_positions_value
+
                 # 1. متابعة الصفقات المفتوحة وتحديث الحالات تلقائياً
                 for symbol in SYMBOLS:
                     if self.positions[symbol] == "LONG":
@@ -246,12 +252,16 @@ class MultiAssetInstitutionalBot:
                             
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
+                            self.position_sizes_usdt[symbol] = 0.0
+                            self.position_sizes_asset[symbol] = 0.0
                             time.sleep(2)
                             continue
 
-                        if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol]:
+                        # التحقق من شرط عدم تجاوز حد التركز قبل السماح بالـ DCA
+                        current_asset_ratio = self.position_sizes_usdt[symbol] / total_portfolio_value if total_portfolio_value > 0 else 0
+                        if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol] and current_asset_ratio < MAX_SINGLE_ASSET_PCT:
                             print(f"[DCA] تفعيل التعافي الذكي لـ {symbol}...")
-                            dca_budget = self.position_sizes_usdt[symbol]
+                            dca_budget = self.position_sizes_usdt[symbol] * 0.5 # تقييد حجم التعزيز بنصف الحجم الأساسي لزيادة الأمان
                             res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
                                 dca_filled = False
@@ -277,16 +287,16 @@ class MultiAssetInstitutionalBot:
                             print(f"[TAKE PROFIT] جني الأرباح للعملة {symbol} عند القمة: {self.highest_prices[symbol]}")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
+                            self.position_sizes_usdt[symbol] = 0.0
+                            self.position_sizes_asset[symbol] = 0.0
                             time.sleep(2)
                     else:
                         # تأكيد تصفير الحالة إذا لم تعد الصفقة موجودة
                         self.positions[symbol] = None
+                        self.position_sizes_usdt[symbol] = 0.0
+                        self.position_sizes_asset[symbol] = 0.0
 
-                # 2. البحث عن فرص جديدة بشروط صحيحة ومدروسة
-                avail_balance = self.get_balance()
-                active_positions_value = sum(self.position_sizes_usdt.values())
-                total_portfolio_value = avail_balance + active_positions_value
-                
+                # 2. البحث عن فرص جديدة مع حماية عدم تجاوز 33% للعملة الواحدة
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة الحي: {total_portfolio_value:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -295,10 +305,14 @@ class MultiAssetInstitutionalBot:
                         if not current_price:
                             continue
 
-                        # التحقق من وجود كاش كافٍ قبل محاولة الشراء لتجنب أخطاء الرفض
+                        # التحقق من أن العملة لم تتجاوز الحد الأقصى المسموح به في المحفظة
+                        current_asset_value = self.position_sizes_usdt[symbol]
+                        if (current_asset_value / total_portfolio_value) >= MAX_SINGLE_ASSET_PCT if total_portfolio_value > 0 else False:
+                            continue
+
                         trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
                         if avail_balance < trade_budget:
-                            continue  # تخطي محاولة الشراء بهدوء إذا لم يكن الكاش كافياً
+                            continue  
 
                         if self.check_market_conditions(symbol):
                             print(f"[FIRE] تطابق الشروط الحقيقية على العملة {symbol}! جاري التنفيذ...")
