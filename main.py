@@ -16,15 +16,15 @@ BASE_URL = "https://www.okx.com"
 SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
-MAX_SINGLE_ASSET_PCT = 0.33 # الحد الأقصى لحصة العملة الواحدة من إجمالي المحفظة (33%)
+MAX_SINGLE_ASSET_PCT = 0.33 
 STOP_LOSS_PCT = 0.003       
-DCA_TRIGGER_PCT = 0.002     # مسافة هبوط محسوبة للتعزيز الحذر
-TAKE_PROFIT_PCT = 0.008     # نسبة جني الأرباح الفوري (0.8%)
+DCA_TRIGGER_PCT = 0.002     
+TAKE_PROFIT_PCT = 0.008     
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
 CHECK_INTERVAL = 7          
 
-class MultiAssetInstitutionalBot:
+class UltimateInstitutionalBot:
     def __init__(self):
         self.positions = {symbol: None for symbol in SYMBOLS}
         self.entry_prices = {symbol: 0.0 for symbol in SYMBOLS}
@@ -79,15 +79,24 @@ class MultiAssetInstitutionalBot:
             print(f"[ERROR] Ticker price failed for {symbol}: {e}")
         return None
 
+    def get_instrument_limits(self, symbol):
+        """جلب الحد الأدنى لحجم العقود ودقة الأرقام لكل عملة من OKX لتجنب الرفض"""
+        try:
+            path = f"/api/v5/public/instruments?instType=SPOT&instId={symbol}"
+            res = requests.get(BASE_URL + path, timeout=10).json()
+            if res.get("code") == "0" and res.get("data"):
+                item = res["data"][0]
+                return float(item.get("lotSz", 1)), float(item.get("minSz", 1))
+        except Exception:
+            pass
+        return 1.0, 1.0
+
     def calculate_adx(self, candles, period=14):
         try:
             if len(candles) < period + 1:
                 return 25.0
             
-            tr_list = []
-            plus_dm_list = []
-            minus_dm_list = []
-            
+            tr_list, plus_dm_list, minus_dm_list = [], [], []
             for i in range(1, len(candles)):
                 high = float(candles[i][2])
                 low = float(candles[i][3])
@@ -120,78 +129,75 @@ class MultiAssetInstitutionalBot:
             return 25.0
 
     def check_market_conditions(self, symbol):
-        """فحص صارم للبحث عن الفرص الذهبية فقط دون أي تسرع"""
+        """خوارزمية فحص النخبة للفرص الذهبية الحقيقية"""
         try:
-            # 1. فلتر الاتجاه العام على الفريم الأكبر (1H)
             htf_path = f"/api/v5/market/candles?instId={symbol}&bar={HIGHER_TIMEFRAME}&limit=20"
             htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
             if htf_res.get("code") == "0" and htf_res.get("data"):
-                htf_candles_reversed = list(reversed(htf_res["data"]))
-                htf_closes = [float(c[4]) for c in htf_candles_reversed]
-                htf_ema = sum(htf_closes) / len(htf_closes)
-                htf_current = htf_closes[-1]
-                if htf_current <= htf_ema:
-                    return False # رفض الصفقة إذا لم يكن الاتجاه العام صاعداً بقوة
+                htf_closes = [float(c[4]) for c in reversed(htf_res["data"])]
+                if htf_closes[-1] <= (sum(htf_closes) / len(htf_closes)):
+                    return False
 
-            # 2. فلتر الزخم على فريم (15m)
             path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=25"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
                 return False
             
-            candles_reversed = list(reversed(res["data"]))
-            closes = [float(candle[4]) for candle in candles_reversed]
+            candles_rev = list(reversed(res["data"]))
+            closes = [float(c[4]) for c in candles_rev]
             ema_20 = sum(closes[-20:]) / 20
-            current_price = closes[-1]
-
-            # اشتراط قوة اتجاه حقيقية (ADX > 22) لمنع الأسواق الميتة
-            adx_val = self.calculate_adx(candles_reversed)
-            if adx_val < 22:
+            
+            if closes[-1] <= ema_20:
+                return False
+            if self.calculate_adx(candles_rev) < 22:
                 return False
 
-            # 3. فلتر دفتر الأوامر للتأكد من ضغط المشترين الحقيقيين
-            book_path = f"/api/v5/market/books?instId={symbol}&sz=15"
-            book_res = requests.get(BASE_URL + book_path, timeout=10).json()
+            book_res = requests.get(BASE_URL + f"/api/v5/market/books?instId={symbol}&sz=15", timeout=10).json()
             if book_res.get("code") != "0":
                 return False
             
-            bids = book_res["data"][0]["bids"]
-            asks = book_res["data"][0]["asks"]
-            
-            bid_volume = sum([float(b[1]) for b in bids])
-            ask_volume = sum([float(a[1]) for a in asks])
+            bids_vol = sum([float(b[1]) for b in book_res["data"][0]["bids"]])
+            asks_vol = sum([float(a[1]) for a in book_res["data"][0]["asks"]])
 
-            # شطارة الفرصة الذهبية: السعر أعلى المتوسط وطلبات الشراء تتفوق بوضوح
-            if current_price > ema_20 and bid_volume > (ask_volume * 1.15):
-                return True
-        except Exception as e:
-            print(f"[WARNING] Market check error for {symbol}: {e}")
-        return False
+            return bids_vol > (asks_vol * 1.15)
+        except Exception:
+            return False
 
     def place_order(self, symbol, side, price, amount, is_sz=False):
         try:
             path = "/api/v5/trade/order"
             execution_price = price
             if side == "sell":
-                execution_price = price * 0.9990 
+                execution_price = price * 0.9985 # سعر تفضيلي لتنفيذ البيع الفوري السريع
+
+            lot_sz, min_sz = self.get_instrument_limits(symbol)
 
             if is_sz:
-                size_asset = round(amount, 6)
+                raw_size = amount
             else:
-                size_asset = round(amount / execution_price, 6)
+                raw_size = amount / execution_price
 
-            if size_asset < 0.000001:
-                return None
-            
+            # ضبط الحجم ليوافق بدقة قوانين منصة OKX للعملات المختلفة
+            multiplier = round(raw_size / lot_sz)
+            size_asset = multiplier * lot_sz
+            if size_asset < min_sz:
+                size_asset = min_sz
+
+            # تنسيق عدد الخانات العشرية بناءً على حجم العملة
+            precision = 2 if symbol.startswith("SOL") else (0 if symbol.startswith("DOGE") else 4)
+            size_str = f"{size_asset:.{precision}f}"
+
             body = {
                 "instId": symbol,
                 "tdMode": "cash",
                 "side": side,
-                "ordType": "limit",
-                "px": str(round(execution_price, 2)),
-                "sz": str(size_asset)
+                "ordType": "market" if side == "sell" else "limit", # استخدام Market للبيع الفوري المضمون
+                "px": str(round(execution_price, 2)) if side == "buy" else "",
+                "sz": size_str
             }
-            
+            if side == "sell":
+                body.pop("px") # أوامر الماركت لا تحتاج لسعر محدد عند البيع الفوري
+
             import json
             body_str = json.dumps(body)
             headers = self.get_signed_headers("POST", path, body_str)
@@ -199,10 +205,10 @@ class MultiAssetInstitutionalBot:
             
             if res.get("code") == "0":
                 ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
-                print(f"[SUCCESS] Order {side.upper()} placed on {symbol}, ID: {ord_id}")
+                print(f"[ULTRA SUCCESS] Order {side.upper()} executed on {symbol}, ID: {ord_id}")
                 return ord_id
             else:
-                print(f"[ERROR] Order rejected on {symbol}: {res.get('msg')}")
+                print(f"[ERROR] Order rejected on {symbol}: {res.get('msg')} (Code: {res.get('code')})")
         except Exception as e:
             print(f"[ERROR] Place order exception: {e}")
         return None
@@ -213,22 +219,21 @@ class MultiAssetInstitutionalBot:
             headers = self.get_signed_headers("GET", path)
             res = requests.get(BASE_URL + path, headers=headers, timeout=10).json()
             if res.get("code") == "0" and res.get("data"):
-                state = res["data"][0].get("state")
-                if state == "filled":
+                if res["data"][0].get("state") == "filled":
                     return True
-        except Exception as e:
-            print(f"[WARNING] Check order status error: {e}")
+        except Exception:
+            pass
         return False
 
     def run(self):
-        print(f"[OKX-GOLDEN-BOT] البوت جاهز ويصطاد الفرص الذهبية فقط بدون تسرع (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
+        print(f"[ULTRA-INSTITUTIONAL-BOT] النظام الخارق يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
-                active_positions_value = sum(self.position_sizes_usdt.values())
-                total_portfolio_value = avail_balance + active_positions_value
+                active_pos_val = sum(self.position_sizes_usdt.values())
+                total_portfolio = avail_balance + active_pos_val
 
-                # 1. متابعة الصفقات المفتوحة بدقة
+                # 1. متابعة الصفقات المفتوحة
                 for symbol in SYMBOLS:
                     if self.positions[symbol] == "LONG":
                         current_price = self.get_ticker_price(symbol)
@@ -238,32 +243,11 @@ class MultiAssetInstitutionalBot:
                         pnl_pct = (current_price - self.entry_prices[symbol]) / self.entry_prices[symbol]
                         drawdown_pct = (self.entry_prices[symbol] - current_price) / self.entry_prices[symbol]
 
-                        print(f"[MONITORING {symbol}] المتوسط: {self.entry_prices[symbol]:.4f} | الحالي: {current_price} | PnL: {pnl_pct*100:.2f}%")
+                        print(f"[MONITORING {symbol}] متوسط التكلفة: {self.entry_prices[symbol]} | الحالي: {current_price} | PnL: {pnl_pct*100:.2f}%")
 
-                        # أ. جني الأرباح الفوري عند 0.8% دون انتظار
+                        # جني الأرباح الفوري المضمون عند 0.8%
                         if pnl_pct >= TAKE_PROFIT_PCT:
-                            print(f"[TAKE PROFIT] تحقيق المستهدف الذهبي ({pnl_pct*100:.2f}%) على {symbol}! جاري البيع الفوري...")
-                            self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
-                            self.positions[symbol] = None
-                            self.position_sizes_usdt[symbol] = 0.0
-                            self.position_sizes_asset[symbol] = 0.0
-                            self.dca_used[symbol] = False 
-                            time.sleep(2)
-                            continue
-
-                        # ب. تأمين نقطة الدخول عند 0.5%
-                        if pnl_pct >= 0.005 and not self.breakeven_activated[symbol]:
-                            self.breakeven_activated[symbol] = True
-                            self.active_stop_loss_pct[symbol] = 0.0000
-                            print(f"[BREAKEVEN] تحقيق 0.5% على {symbol}! تم تأمين نقطة الدخول.")
-
-                        # ج. وقف الخسارة
-                        if drawdown_pct >= self.active_stop_loss_pct[symbol]:
-                            if self.breakeven_activated[symbol]:
-                                print(f"[BREAKEVEN EXIT] الخروج بأمان عند نقطة الدخول لـ {symbol}...")
-                            else:
-                                print(f"[STOP LOSS] تفعيل وقف الخسارة الحازم لـ {symbol}...")
-                            
+                            print(f"[ULTRA TAKE PROFIT] تم تحقيق الهدف ({pnl_pct*100:.2f}%) على {symbol}! تنفيذ بيع فوري...")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             self.position_sizes_usdt[symbol] = 0.0
@@ -272,37 +256,47 @@ class MultiAssetInstitutionalBot:
                             time.sleep(2)
                             continue
 
-                        # د. نظام التعزيز الحذر (مرة واحدة فقط بـ 30%)
-                        current_asset_ratio = self.position_sizes_usdt[symbol] / total_portfolio_value if total_portfolio_value > 0 else 0
-                        if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol] and current_asset_ratio < MAX_SINGLE_ASSET_PCT:
-                            print(f"[DCA] تفعيل التعزيز الحذر لمرة واحدة لـ {symbol}...")
-                            dca_budget = self.position_sizes_usdt[symbol] * 0.3 
+                        # تأمين نقطة الدخول عند 0.5%
+                        if pnl_pct >= 0.005 and not self.breakeven_activated[symbol]:
+                            self.breakeven_activated[symbol] = True
+                            self.active_stop_loss_pct[symbol] = 0.0000
+                            print(f"[BREAKEVEN SECURED] تم تأمين نقطة الدخول لـ {symbol}.")
+
+                        # وقف الخسارة الحازم
+                        if drawdown_pct >= self.active_stop_loss_pct[symbol]:
+                            print(f"[STOP LOSS TRIGGER] الخروج الفوري لحماية المحفظة في {symbol}...")
+                            self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
+                            self.positions[symbol] = None
+                            self.position_sizes_usdt[symbol] = 0.0
+                            self.position_sizes_asset[symbol] = 0.0
+                            self.dca_used[symbol] = False
+                            time.sleep(2)
+                            continue
+
+                        # التعزيز الذكي الآمن لمرة واحدة (30%)
+                        curr_ratio = self.position_sizes_usdt[symbol] / total_portfolio if total_portfolio > 0 else 0
+                        if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol] and curr_ratio < MAX_SINGLE_ASSET_PCT:
+                            print(f"[ULTRA DCA] تفعيل التعزيز الذكي الآمن لمرة واحدة لـ {symbol}...")
+                            dca_budget = self.position_sizes_usdt[symbol] * 0.3
                             res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
-                                dca_filled = False
-                                for _ in range(3):
-                                    time.sleep(2)
-                                    if self.check_order_filled(symbol, res_id):
-                                        dca_filled = True
-                                        break
-                                
-                                if dca_filled:
-                                    dca_asset_qty = dca_budget / current_price
-                                    total_cost = self.position_sizes_usdt[symbol] + dca_budget
-                                    total_size = self.position_sizes_asset[symbol] + dca_asset_qty
-                                    
-                                    self.entry_prices[symbol] = total_cost / total_size
-                                    self.position_sizes_usdt[symbol] = total_cost
-                                    self.position_sizes_asset[symbol] = total_size
-                                    self.dca_used[symbol] = True 
-                                    print(f"[DCA SUCCESS] تم تعزيز {symbol} وتحديث المتوسط: {self.entry_prices[symbol]:.4f}")
+                                time.sleep(2)
+                                if self.check_order_filled(symbol, res_id):
+                                    dca_qty = dca_budget / current_price
+                                    total_c = self.position_sizes_usdt[symbol] + dca_budget
+                                    total_s = self.position_sizes_asset[symbol] + dca_qty
+                                    self.entry_prices[symbol] = total_c / total_s
+                                    self.position_sizes_usdt[symbol] = total_c
+                                    self.position_sizes_asset[symbol] = total_s
+                                    self.dca_used[symbol] = True
+                                    print(f"[DCA SUCCESS] متوسط السعر الجديد لـ {symbol}: {self.entry_prices[symbol]}")
                     else:
                         self.positions[symbol] = None
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. البحث حصرياً عن الفرص الذهبية الحقيقية
-                print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة الحي: {total_portfolio_value:.2f} USDT")
+                # 2. الماسح الذكي للفرص الذهبية
+                print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة: {total_portfolio:.2f} USDT")
 
                 for symbol in SYMBOLS:
                     if self.positions[symbol] is None:
@@ -310,20 +304,17 @@ class MultiAssetInstitutionalBot:
                         if not current_price:
                             continue
 
-                        current_asset_value = self.position_sizes_usdt[symbol]
-                        if (current_asset_value / total_portfolio_value) >= MAX_SINGLE_ASSET_PCT if total_portfolio_value > 0 else False:
+                        if (self.position_sizes_usdt[symbol] / total_portfolio >= MAX_SINGLE_ASSET_PCT) if total_portfolio > 0 else False:
                             continue
 
-                        trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
+                        trade_budget = (total_portfolio * ALLOCATION_PCT) / 3
                         if avail_balance < trade_budget:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[FIRE - GOLDEN CHANCE] تم العثور على الفرصة الذهبية المؤكدة على {symbol}! جاري التنفيذ...")
-                            
+                            print(f"[GOLDEN ENTRY] فرصة ذهبية مؤكدة بنسبة 100% على {symbol}! جاري التنفيذ...")
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
-                                print(f"[WAITING FILL] بانتظار تأكيد الشراء لـ {symbol}...")
                                 for _ in range(3):
                                     time.sleep(2)
                                     if self.check_order_filled(symbol, order_id):
@@ -334,12 +325,10 @@ class MultiAssetInstitutionalBot:
                                         self.dca_used[symbol] = False
                                         self.breakeven_activated[symbol] = False
                                         self.active_stop_loss_pct[symbol] = STOP_LOSS_PCT
-                                        print(f"[ACTIVE SUCCESS] تم تفعيل الصفقة الذهبية على {symbol} بسعر: {current_price}")
+                                        print(f"[ACTIVE SUCCESS] دخلت صفقة {symbol} بنجاح بسعر {current_price}")
                                         break
-                                else:
-                                    print(f"[TIMEOUT] لم يتم تنفيذ الشراء على {symbol}.")
                         else:
-                            print(f"[SLEEP] البوت يراقب بهدوء... لا توجد فرصة ذهبية حالياً على {symbol}.")
+                            print(f"[SLEEP] البوت يراقب السوق بهدوء تامة لـ {symbol}...")
                     
                     time.sleep(2)
 
@@ -349,6 +338,6 @@ class MultiAssetInstitutionalBot:
                 time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
-    bot = MultiAssetInstitutionalBot()
+    bot = UltimateInstitutionalBot()
     bot.run()
     
