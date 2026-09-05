@@ -19,7 +19,7 @@ SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
 ALLOCATION_PCT = 0.80       
 STOP_LOSS_PCT = 0.003       
 DCA_TRIGGER_PCT = 0.0015    
-TRAILING_CALLBACK = 0.002   
+TRAILING_CALLBACK = 0.001   # تم تعديل نسبة التراجع إلى 0.1% لجني الأرباح بشكل أسرع وأكثر حساسية
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
 
@@ -217,7 +217,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بالطريقة الأصلية الناجحة...")
+        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بنسبة التراجع الجديدة 0.1%...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
