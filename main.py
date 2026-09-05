@@ -148,10 +148,39 @@ class UltimateInstitutionalBot:
         except Exception:
             return 25.0
 
-    def check_market_conditions(self, symbol):
-        """خوارزمية القناص الشاملة: فحص الاتجاه، الزخم، دفتر الأوامر، مؤشر RSI، وحجم التداول"""
+    def calculate_macd(self, closes):
         try:
-            # 1. فحص الاتجاه العام على الفريم الأكبر (1H)
+            if len(closes) < 26:
+                return 0, 0
+            # حساب مبسط للـ MACD (EMA 12 - EMA 26)
+            ema12 = sum(closes[-12:]) / 12
+            ema26 = sum(closes[-26:]) / 26
+            macd_line = ema12 - ema26
+            return macd_line, 1 if macd_line > 0 else -1
+        except Exception:
+            return 0, 0
+
+    def calculate_bollinger_bands(self, closes, period=20):
+        try:
+            if len(closes) < period:
+                return True
+            ma = sum(closes[-period:]) / period
+            variance = sum([(x - ma) ** 2 for x in closes[-period:]]) / period
+            std_dev = variance ** 0.5
+            upper_band = ma + (2 * std_dev)
+            lower_band = ma - (2 * std_dev)
+            # التأكد أن السعر غير ملتصق تماماً بالحد العلوي بشكل خططر
+            current_price = closes[-1]
+            if current_price >= upper_band:
+                return False # تجنب الشراء خارج أو على حافة البولنجر العلوية
+            return True
+        except Exception:
+            return True
+
+    def check_market_conditions(self, symbol):
+        """خوارزمية الفحص السيبراني الشامل (7 فلاتر متكاملة)"""
+        try:
+            # 1. اتجاه الفريم الأكبر (1H)
             htf_path = f"/api/v5/market/candles?instId={symbol}&bar={HIGHER_TIMEFRAME}&limit=20"
             htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
             if htf_res.get("code") == "0" and htf_res.get("data"):
@@ -159,8 +188,8 @@ class UltimateInstitutionalBot:
                 if htf_closes[-1] <= (sum(htf_closes) / len(htf_closes)):
                     return False
 
-            # 2. فحص الزخم والشموع على (15m)
-            path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=25"
+            # 2. الشموع والزخم على (15m)
+            path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=30"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
                 return False
@@ -173,21 +202,29 @@ class UltimateInstitutionalBot:
             if closes[-1] <= ema_20:
                 return False
             
-            # فحص قوة الاتجاه ADX
+            # 3. قوة الاتجاه ADX
             if self.calculate_adx(candles_rev) < 22:
                 return False
 
-            # 3. فحص مؤشر RSI (منع الشراء في منطقة التشبع الشرائي القمة فوق 70)
+            # 4. مؤشر RSI (منع الشبع الشرائي فوق 70 أو الضعف تحت 40)
             rsi_val = self.calculate_rsi(closes)
             if rsi_val > 70 or rsi_val < 40:
                 return False
 
-            # 4. فحص حجم التداول (Volume) لضمان السيولة الحقيقية
+            # 5. مؤشر MACD (التأكد من أن الزخم الإيجابي صاعد)
+            _, macd_signal = self.calculate_macd(closes)
+            if macd_signal <= 0:
+                return False
+
+            # 6. مؤشر البولنجر باند (منع الشراء في مناطق التضخم العلوي)
+            if not self.calculate_bollinger_bands(closes):
+                return False
+
+            # 7. حجم التداول ودفتر الأوامر (السيولة الحقيقية)
             avg_volume = sum(volumes[-10:]) / 10
             if volumes[-1] < (avg_volume * 0.9):
                 return False
 
-            # 5. فحص دفتر الأوامر وضغط المشترين
             book_res = requests.get(BASE_URL + f"/api/v5/market/books?instId={symbol}&sz=15", timeout=10).json()
             if book_res.get("code") != "0":
                 return False
@@ -239,7 +276,7 @@ class UltimateInstitutionalBot:
             
             if res.get("code") == "0":
                 ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
-                print(f"[SNIPER SUCCESS] Order {side.upper()} executed on {symbol}, ID: {ord_id}")
+                print(f"[ELITE SUCCESS] Order {side.upper()} executed on {symbol}, ID: {ord_id}")
                 return ord_id
             else:
                 print(f"[ERROR] Order rejected on {symbol}: {res.get('msg')} (Code: {res.get('code')})")
@@ -260,7 +297,7 @@ class UltimateInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[SNIPER-BOT] النظام القناص يعمل بأقصى درجات الفلترة والذكاء (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
+        print(f"[ELITE-BOT] نظام الفلاتر السبعة المتقدم يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
@@ -329,7 +366,7 @@ class UltimateInstitutionalBot:
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. الماسح القناص للفرص النظيفة
+                # 2. الماسح الذكي للصفقات النظيفة
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة: {total_portfolio:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -346,7 +383,7 @@ class UltimateInstitutionalBot:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[SNIPER ENTRY] توافقت كافة شروط القنص بدقة على {symbol}! جاري التنفيذ...")
+                            print(f"[ELITE ENTRY] اجتازت العملة الفلاتر السبعة بنجاح تام على {symbol}! جاري التنفيذ...")
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
                                 for _ in range(3):
@@ -359,10 +396,10 @@ class UltimateInstitutionalBot:
                                         self.dca_used[symbol] = False
                                         self.breakeven_activated[symbol] = False
                                         self.active_stop_loss_pct[symbol] = STOP_LOSS_PCT
-                                        print(f"[ACTIVE SUCCESS] دخلت الصفقة النظيفة {symbol} بنجاح بسعر {current_price}")
+                                        print(f"[ACTIVE SUCCESS] دخلت الصفقة الاحترافية {symbol} بسعر {current_price}")
                                         break
                         else:
-                            print(f"[SLEEP] البوت يراقب بدقة... لا توجد فرصة مطابقة 100% على {symbol}.")
+                            print(f"[SLEEP] البوت يراقب بدقة... لم تتطابق الفلاتر السبعة بالكامل على {symbol}.")
                     
                     time.sleep(2)
 
