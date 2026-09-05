@@ -236,16 +236,12 @@ class UltimateInstitutionalBot:
     def place_order(self, symbol, side, price, amount, is_sz=False):
         try:
             path = "/api/v5/trade/order"
-            execution_price = price
-            if side == "sell":
-                execution_price = price * 0.9985 
-
             lot_sz, min_sz = self.get_instrument_limits(symbol)
 
             if is_sz:
                 raw_size = amount
             else:
-                raw_size = amount / execution_price
+                raw_size = amount / price
 
             multiplier = round(raw_size / lot_sz)
             size_asset = multiplier * lot_sz
@@ -259,12 +255,9 @@ class UltimateInstitutionalBot:
                 "instId": symbol,
                 "tdMode": "cash",
                 "side": side,
-                "ordType": "market" if side == "sell" else "limit", 
-                "px": str(round(execution_price, 2)) if side == "buy" else "",
+                "ordType": "market",
                 "sz": size_str
             }
-            if side == "sell":
-                body.pop("px") 
 
             import json
             body_str = json.dumps(body)
@@ -294,7 +287,7 @@ class UltimateInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[ELITE-BOT] نظام الفلاتر العشرة المتقدم يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
+        print(f"[ELITE-BOT] نظام الفلاتر السبعة المتقدم يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
@@ -363,7 +356,7 @@ class UltimateInstitutionalBot:
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. الماسح الذكي للصفقات النظيفة (مع التوزيع العادل والمستقل)
+                # 2. الماسح الذكي للصفقات النظيفة
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة: {total_portfolio:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -372,12 +365,10 @@ class UltimateInstitutionalBot:
                         if not current_price:
                             continue
 
-                        # حساب ميزانية عادلة ومستقلة لكل عملة بناءً على إجمالي المحفظة مقسوماً على 3 (مع تخصيص 80%)
                         max_allowed_per_asset = total_portfolio * MAX_SINGLE_ASSET_PCT
                         calculated_budget = (total_portfolio * ALLOCATION_PCT) / 3
                         trade_budget = min(calculated_budget, max_allowed_per_asset)
 
-                        # التحقق من عدم تجاوز النسبة القصوى أو عدم توفر الكاش العادل
                         if (self.position_sizes_usdt[symbol] / total_portfolio >= MAX_SINGLE_ASSET_PCT) if total_portfolio > 0 else False:
                             continue
 
@@ -385,7 +376,7 @@ class UltimateInstitutionalBot:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[ELITE ENTRY] اجتازت العملة الفلاتر بنجاح تام على {symbol}! جاري التنفيذ بحصة عادلة...")
+                            print(f"[ELITE ENTRY] اجتازت العملة الفلاتر السبعة بنجاح تام على {symbol}! جاري التنفيذ...")
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
                                 for _ in range(3):
@@ -401,7 +392,7 @@ class UltimateInstitutionalBot:
                                         print(f"[ACTIVE SUCCESS] دخلت الصفقة الاحترافية {symbol} بسعر {current_price}")
                                         break
                         else:
-                            print(f"[SLEEP] البوت يراقب بدقة... لم تتطابق الشروط على {symbol}.")
+                            print(f"[SLEEP] البوت يراقب بدقة... لم تتطابق الفلاتر السبعة بالكامل على {symbol}.")
                     
                     time.sleep(2)
 
@@ -413,4 +404,4 @@ class UltimateInstitutionalBot:
 if __name__ == "__main__":
     bot = UltimateInstitutionalBot()
     bot.run()
-                            
+    
