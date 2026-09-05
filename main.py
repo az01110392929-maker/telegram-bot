@@ -13,7 +13,8 @@ PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
 
-SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
+# تم استبدال DOGE بعملة AVAX القوية والمستقرة لتجنب أي أخطاء في الحدود الدنيا
+SYMBOLS = ["SUI-USDT", "AVAX-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
 MAX_SINGLE_ASSET_PCT = 0.33 
@@ -177,26 +178,25 @@ class UltimateInstitutionalBot:
             else:
                 raw_size = amount / execution_price
 
-            # ضبط الحجم ليوافق بدقة قوانين منصة OKX للعملات المختلفة
             multiplier = round(raw_size / lot_sz)
             size_asset = multiplier * lot_sz
             if size_asset < min_sz:
                 size_asset = min_sz
 
-            # تنسيق عدد الخانات العشرية بناءً على حجم العملة
-            precision = 2 if symbol.startswith("SOL") else (0 if symbol.startswith("DOGE") else 4)
+            # ضبط الخانات العشرية بدقة للعملات الحالية (SOL, SUI, AVAX)
+            precision = 2 if symbol.startswith("SOL") or symbol.startswith("AVAX") else 4
             size_str = f"{size_asset:.{precision}f}"
 
             body = {
                 "instId": symbol,
                 "tdMode": "cash",
                 "side": side,
-                "ordType": "market" if side == "sell" else "limit", # استخدام Market للبيع الفوري المضمون
+                "ordType": "market" if side == "sell" else "limit", 
                 "px": str(round(execution_price, 2)) if side == "buy" else "",
                 "sz": size_str
             }
             if side == "sell":
-                body.pop("px") # أوامر الماركت لا تحتاج لسعر محدد عند البيع الفوري
+                body.pop("px") 
 
             import json
             body_str = json.dumps(body)
