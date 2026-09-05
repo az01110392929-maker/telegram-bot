@@ -152,7 +152,6 @@ class UltimateInstitutionalBot:
         try:
             if len(closes) < 26:
                 return 0, 0
-            # حساب مبسط للـ MACD (EMA 12 - EMA 26)
             ema12 = sum(closes[-12:]) / 12
             ema26 = sum(closes[-26:]) / 26
             macd_line = ema12 - ema26
@@ -168,11 +167,9 @@ class UltimateInstitutionalBot:
             variance = sum([(x - ma) ** 2 for x in closes[-period:]]) / period
             std_dev = variance ** 0.5
             upper_band = ma + (2 * std_dev)
-            lower_band = ma - (2 * std_dev)
-            # التأكد أن السعر غير ملتصق تماماً بالحد العلوي بشكل خططر
             current_price = closes[-1]
             if current_price >= upper_band:
-                return False # تجنب الشراء خارج أو على حافة البولنجر العلوية
+                return False 
             return True
         except Exception:
             return True
@@ -206,21 +203,21 @@ class UltimateInstitutionalBot:
             if self.calculate_adx(candles_rev) < 22:
                 return False
 
-            # 4. مؤشر RSI (منع الشبع الشرائي فوق 70 أو الضعف تحت 40)
+            # 4. مؤشر RSI
             rsi_val = self.calculate_rsi(closes)
             if rsi_val > 70 or rsi_val < 40:
                 return False
 
-            # 5. مؤشر MACD (التأكد من أن الزخم الإيجابي صاعد)
+            # 5. مؤشر MACD
             _, macd_signal = self.calculate_macd(closes)
             if macd_signal <= 0:
                 return False
 
-            # 6. مؤشر البولنجر باند (منع الشراء في مناطق التضخم العلوي)
+            # 6. مؤشر البولنجر باند
             if not self.calculate_bollinger_bands(closes):
                 return False
 
-            # 7. حجم التداول ودفتر الأوامر (السيولة الحقيقية)
+            # 7. حجم التداول ودفتر الأوامر
             avg_volume = sum(volumes[-10:]) / 10
             if volumes[-1] < (avg_volume * 0.9):
                 return False
@@ -297,7 +294,7 @@ class UltimateInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[ELITE-BOT] نظام الفلاتر السبعة المتقدم يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
+        print(f"[ELITE-BOT] نظام الفلاتر العشرة المتقدم يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
@@ -366,7 +363,7 @@ class UltimateInstitutionalBot:
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. الماسح الذكي للصفقات النظيفة
+                # 2. الماسح الذكي للصفقات النظيفة (مع التوزيع العادل والمستقل)
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة: {total_portfolio:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -375,15 +372,20 @@ class UltimateInstitutionalBot:
                         if not current_price:
                             continue
 
+                        # حساب ميزانية عادلة ومستقلة لكل عملة بناءً على إجمالي المحفظة مقسوماً على 3 (مع تخصيص 80%)
+                        max_allowed_per_asset = total_portfolio * MAX_SINGLE_ASSET_PCT
+                        calculated_budget = (total_portfolio * ALLOCATION_PCT) / 3
+                        trade_budget = min(calculated_budget, max_allowed_per_asset)
+
+                        # التحقق من عدم تجاوز النسبة القصوى أو عدم توفر الكاش العادل
                         if (self.position_sizes_usdt[symbol] / total_portfolio >= MAX_SINGLE_ASSET_PCT) if total_portfolio > 0 else False:
                             continue
 
-                        trade_budget = (total_portfolio * ALLOCATION_PCT) / 3
                         if avail_balance < trade_budget:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[ELITE ENTRY] اجتازت العملة الفلاتر السبعة بنجاح تام على {symbol}! جاري التنفيذ...")
+                            print(f"[ELITE ENTRY] اجتازت العملة الفلاتر بنجاح تام على {symbol}! جاري التنفيذ بحصة عادلة...")
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
                                 for _ in range(3):
@@ -399,7 +401,7 @@ class UltimateInstitutionalBot:
                                         print(f"[ACTIVE SUCCESS] دخلت الصفقة الاحترافية {symbol} بسعر {current_price}")
                                         break
                         else:
-                            print(f"[SLEEP] البوت يراقب بدقة... لم تتطابق الفلاتر السبعة بالكامل على {symbol}.")
+                            print(f"[SLEEP] البوت يراقب بدقة... لم تتطابق الشروط على {symbol}.")
                     
                     time.sleep(2)
 
@@ -411,4 +413,4 @@ class UltimateInstitutionalBot:
 if __name__ == "__main__":
     bot = UltimateInstitutionalBot()
     bot.run()
-    
+                            
