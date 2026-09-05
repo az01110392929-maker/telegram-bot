@@ -13,16 +13,15 @@ PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
 
-# قائمة العملات المحدثة ذات التذبذب العالي والحركة الأسرع
 SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
 STOP_LOSS_PCT = 0.003       
 DCA_TRIGGER_PCT = 0.0015    
-TRAILING_CALLBACK = 0.001   # نسبة التراجع 0.1% لجني الأرباح بشكل أسرع
+TRAILING_CALLBACK = 0.001   
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
-CHECK_INTERVAL = 7          # تم تعديل سرعة الفحص والدورة لتصبح كل 7 ثوانٍ
+CHECK_INTERVAL = 7          
 
 class MultiAssetInstitutionalBot:
     def __init__(self):
@@ -216,10 +215,10 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بالعملات السريعة وبفحص كل {CHECK_INTERVAL} ثوانٍ...")
+        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بانتظام وبفحص كل {CHECK_INTERVAL} ثوانٍ...")
         while True:
             try:
-                # 1. متابعة الصفقات المفتوحة
+                # 1. متابعة الصفقات المفتوحة وتحديث الحالات تلقائياً
                 for symbol in SYMBOLS:
                     if self.positions[symbol] == "LONG":
                         current_price = self.get_ticker_price(symbol)
@@ -279,8 +278,11 @@ class MultiAssetInstitutionalBot:
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             time.sleep(2)
+                    else:
+                        # تأكيد تصفير الحالة إذا لم تعد الصفقة موجودة
+                        self.positions[symbol] = None
 
-                # 2. البحث عن فرص جديدة بالرصيد الحي المباشر
+                # 2. البحث عن فرص جديدة بشروط صحيحة ومدروسة
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
@@ -293,9 +295,13 @@ class MultiAssetInstitutionalBot:
                         if not current_price:
                             continue
 
+                        # التحقق من وجود كاش كافٍ قبل محاولة الشراء لتجنب أخطاء الرفض
+                        trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
+                        if avail_balance < trade_budget:
+                            continue  # تخطي محاولة الشراء بهدوء إذا لم يكن الكاش كافياً
+
                         if self.check_market_conditions(symbol):
-                            print(f"[FIRE] تطابق الشروط على العملة {symbol}! جاري التنفيذ...")
-                            trade_budget = (total_portfolio_value * ALLOCATION_PCT) / 3
+                            print(f"[FIRE] تطابق الشروط الحقيقية على العملة {symbol}! جاري التنفيذ...")
                             
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
@@ -316,7 +322,7 @@ class MultiAssetInstitutionalBot:
                                 else:
                                     print(f"[TIMEOUT] لم يتم تنفيذ الشراء على {symbol}.")
                         else:
-                            print(f"[SLEEP] بانتظار الفرصة على {symbol}...")
+                            print(f"[SLEEP] بانتظار الفرصة الآمنة على {symbol}...")
                     
                     time.sleep(2)
 
