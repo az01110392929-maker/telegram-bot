@@ -13,15 +13,16 @@ PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
 
-# قائمة العملات المتعددة
-SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+# قائمة العملات المحدثة ذات التذبذب العالي والحركة الأسرع
+SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
 STOP_LOSS_PCT = 0.003       
 DCA_TRIGGER_PCT = 0.0015    
-TRAILING_CALLBACK = 0.001   # تم تعديل نسبة التراجع إلى 0.1% لجني الأرباح بشكل أسرع وأكثر حساسية
+TRAILING_CALLBACK = 0.001   # نسبة التراجع 0.1% لجني الأرباح بشكل أسرع
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
+CHECK_INTERVAL = 7          # تم تعديل سرعة الفحص والدورة لتصبح كل 7 ثوانٍ
 
 class MultiAssetInstitutionalBot:
     def __init__(self):
@@ -38,7 +39,6 @@ class MultiAssetInstitutionalBot:
         timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         message = timestamp + method.upper() + request_path + body
         mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), hashlib.sha256)
-        # السر الأول: استخدام base64 تماماً مثل الكود القديم الناجح
         sign = base64.b64encode(mac.digest()).decode('utf-8')
         return {
             "OK-ACCESS-KEY": API_KEY,
@@ -50,7 +50,6 @@ class MultiAssetInstitutionalBot:
 
     def get_balance(self):
         try:
-            # السر الثاني: المسار النظيف بدون بارامترات تماماً مثل الكود القديم
             path = "/api/v5/account/balance"
             headers = self.get_signed_headers("GET", path)
             response = requests.get(BASE_URL + path, headers=headers, timeout=10)
@@ -217,7 +216,7 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print("[OKX-MULTI-ASSET-BOT] النظام متعدد العملات متصل وجاهز بنسبة التراجع الجديدة 0.1%...")
+        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بالعملات السريعة وبفحص كل {CHECK_INTERVAL} ثوانٍ...")
         while True:
             try:
                 # 1. متابعة الصفقات المفتوحة
@@ -248,7 +247,7 @@ class MultiAssetInstitutionalBot:
                             
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
-                            time.sleep(5)
+                            time.sleep(2)
                             continue
 
                         if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol]:
@@ -257,8 +256,8 @@ class MultiAssetInstitutionalBot:
                             res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
                                 dca_filled = False
-                                for _ in range(6):
-                                    time.sleep(5)
+                                for _ in range(3):
+                                    time.sleep(2)
                                     if self.check_order_filled(symbol, res_id):
                                         dca_filled = True
                                         break
@@ -279,7 +278,7 @@ class MultiAssetInstitutionalBot:
                             print(f"[TAKE PROFIT] جني الأرباح للعملة {symbol} عند القمة: {self.highest_prices[symbol]}")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
-                            time.sleep(5)
+                            time.sleep(2)
 
                 # 2. البحث عن فرص جديدة بالرصيد الحي المباشر
                 avail_balance = self.get_balance()
@@ -301,8 +300,8 @@ class MultiAssetInstitutionalBot:
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
                                 print(f"[WAITING FILL] بانتظار تأكيد الشراء لـ {symbol}...")
-                                for _ in range(6):
-                                    time.sleep(5)
+                                for _ in range(3):
+                                    time.sleep(2)
                                     if self.check_order_filled(symbol, order_id):
                                         self.positions[symbol] = "LONG"
                                         self.entry_prices[symbol] = current_price
@@ -319,12 +318,12 @@ class MultiAssetInstitutionalBot:
                         else:
                             print(f"[SLEEP] بانتظار الفرصة على {symbol}...")
                     
-                    time.sleep(5)
+                    time.sleep(2)
 
-                time.sleep(15)
+                time.sleep(CHECK_INTERVAL)
             except Exception as e:
                 print(f"[CRITICAL ERROR] Loop exception: {e}")
-                time.sleep(15)
+                time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
     bot = MultiAssetInstitutionalBot()
