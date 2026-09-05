@@ -13,7 +13,6 @@ PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
 
 BASE_URL = "https://www.okx.com" 
 
-# تم استبدال DOGE بعملة AVAX القوية والمستقرة لتجنب أي أخطاء في الحدود الدنيا
 SYMBOLS = ["SUI-USDT", "AVAX-USDT", "SOL-USDT"]
 
 ALLOCATION_PCT = 0.80       
@@ -81,7 +80,6 @@ class UltimateInstitutionalBot:
         return None
 
     def get_instrument_limits(self, symbol):
-        """جلب الحد الأدنى لحجم العقود ودقة الأرقام لكل عملة من OKX لتجنب الرفض"""
         try:
             path = f"/api/v5/public/instruments?instType=SPOT&instId={symbol}"
             res = requests.get(BASE_URL + path, timeout=10).json()
@@ -91,6 +89,27 @@ class UltimateInstitutionalBot:
         except Exception:
             pass
         return 1.0, 1.0
+
+    def calculate_rsi(self, closes, period=14):
+        try:
+            if len(closes) < period + 1:
+                return 50.0
+            gains, losses = 0.0, 0.0
+            for i in range(1, period + 1):
+                diff = closes[i] - closes[i-1]
+                if diff > 0:
+                    gains += diff
+                else:
+                    losses -= diff
+            avg_gain = gains / period
+            avg_loss = losses / period
+            if avg_loss == 0:
+                return 100.0
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
+        except Exception:
+            return 50.0
 
     def calculate_adx(self, candles, period=14):
         try:
@@ -130,8 +149,9 @@ class UltimateInstitutionalBot:
             return 25.0
 
     def check_market_conditions(self, symbol):
-        """خوارزمية فحص النخبة للفرص الذهبية الحقيقية"""
+        """خوارزمية القناص الشاملة: فحص الاتجاه، الزخم، دفتر الأوامر، مؤشر RSI، وحجم التداول"""
         try:
+            # 1. فحص الاتجاه العام على الفريم الأكبر (1H)
             htf_path = f"/api/v5/market/candles?instId={symbol}&bar={HIGHER_TIMEFRAME}&limit=20"
             htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
             if htf_res.get("code") == "0" and htf_res.get("data"):
@@ -139,6 +159,7 @@ class UltimateInstitutionalBot:
                 if htf_closes[-1] <= (sum(htf_closes) / len(htf_closes)):
                     return False
 
+            # 2. فحص الزخم والشموع على (15m)
             path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=25"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
@@ -146,13 +167,27 @@ class UltimateInstitutionalBot:
             
             candles_rev = list(reversed(res["data"]))
             closes = [float(c[4]) for c in candles_rev]
+            volumes = [float(c[5]) for c in candles_rev]
             ema_20 = sum(closes[-20:]) / 20
             
             if closes[-1] <= ema_20:
                 return False
+            
+            # فحص قوة الاتجاه ADX
             if self.calculate_adx(candles_rev) < 22:
                 return False
 
+            # 3. فحص مؤشر RSI (منع الشراء في منطقة التشبع الشرائي القمة فوق 70)
+            rsi_val = self.calculate_rsi(closes)
+            if rsi_val > 70 or rsi_val < 40:
+                return False
+
+            # 4. فحص حجم التداول (Volume) لضمان السيولة الحقيقية
+            avg_volume = sum(volumes[-10:]) / 10
+            if volumes[-1] < (avg_volume * 0.9):
+                return False
+
+            # 5. فحص دفتر الأوامر وضغط المشترين
             book_res = requests.get(BASE_URL + f"/api/v5/market/books?instId={symbol}&sz=15", timeout=10).json()
             if book_res.get("code") != "0":
                 return False
@@ -169,7 +204,7 @@ class UltimateInstitutionalBot:
             path = "/api/v5/trade/order"
             execution_price = price
             if side == "sell":
-                execution_price = price * 0.9985 # سعر تفضيلي لتنفيذ البيع الفوري السريع
+                execution_price = price * 0.9985 
 
             lot_sz, min_sz = self.get_instrument_limits(symbol)
 
@@ -183,7 +218,6 @@ class UltimateInstitutionalBot:
             if size_asset < min_sz:
                 size_asset = min_sz
 
-            # ضبط الخانات العشرية بدقة للعملات الحالية (SOL, SUI, AVAX)
             precision = 2 if symbol.startswith("SOL") or symbol.startswith("AVAX") else 4
             size_str = f"{size_asset:.{precision}f}"
 
@@ -205,7 +239,7 @@ class UltimateInstitutionalBot:
             
             if res.get("code") == "0":
                 ord_id = res["data"] if isinstance(res["data"], str) else res["data"][0]["ordId"]
-                print(f"[ULTRA SUCCESS] Order {side.upper()} executed on {symbol}, ID: {ord_id}")
+                print(f"[SNIPER SUCCESS] Order {side.upper()} executed on {symbol}, ID: {ord_id}")
                 return ord_id
             else:
                 print(f"[ERROR] Order rejected on {symbol}: {res.get('msg')} (Code: {res.get('code')})")
@@ -226,7 +260,7 @@ class UltimateInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[ULTRA-INSTITUTIONAL-BOT] النظام الخارق يعمل بأقصى طاقة (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
+        print(f"[SNIPER-BOT] النظام القناص يعمل بأقصى درجات الفلترة والذكاء (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
@@ -245,9 +279,9 @@ class UltimateInstitutionalBot:
 
                         print(f"[MONITORING {symbol}] متوسط التكلفة: {self.entry_prices[symbol]} | الحالي: {current_price} | PnL: {pnl_pct*100:.2f}%")
 
-                        # جني الأرباح الفوري المضمون عند 0.8%
+                        # جني الأرباح الفوري عند 0.8%
                         if pnl_pct >= TAKE_PROFIT_PCT:
-                            print(f"[ULTRA TAKE PROFIT] تم تحقيق الهدف ({pnl_pct*100:.2f}%) على {symbol}! تنفيذ بيع فوري...")
+                            print(f"[TAKE PROFIT] تحقيق الهدف ({pnl_pct*100:.2f}%) على {symbol}! تنفيذ بيع فوري...")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             self.position_sizes_usdt[symbol] = 0.0
@@ -260,11 +294,11 @@ class UltimateInstitutionalBot:
                         if pnl_pct >= 0.005 and not self.breakeven_activated[symbol]:
                             self.breakeven_activated[symbol] = True
                             self.active_stop_loss_pct[symbol] = 0.0000
-                            print(f"[BREAKEVEN SECURED] تم تأمين نقطة الدخول لـ {symbol}.")
+                            print(f"[BREAKEVEN] تم تأمين نقطة الدخول لـ {symbol}.")
 
-                        # وقف الخسارة الحازم
+                        # وقف الخسارة الحازم عند 0.3%
                         if drawdown_pct >= self.active_stop_loss_pct[symbol]:
-                            print(f"[STOP LOSS TRIGGER] الخروج الفوري لحماية المحفظة في {symbol}...")
+                            print(f"[STOP LOSS] الخروج الفوري لحماية المحفظة في {symbol}...")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             self.position_sizes_usdt[symbol] = 0.0
@@ -273,10 +307,10 @@ class UltimateInstitutionalBot:
                             time.sleep(2)
                             continue
 
-                        # التعزيز الذكي الآمن لمرة واحدة (30%)
+                        # التعزيز الذكي الآمن لمرة واحدة فقط (30%)
                         curr_ratio = self.position_sizes_usdt[symbol] / total_portfolio if total_portfolio > 0 else 0
                         if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol] and curr_ratio < MAX_SINGLE_ASSET_PCT:
-                            print(f"[ULTRA DCA] تفعيل التعزيز الذكي الآمن لمرة واحدة لـ {symbol}...")
+                            print(f"[DCA] تفعيل التعزيز الآمن لمرة واحدة لـ {symbol}...")
                             dca_budget = self.position_sizes_usdt[symbol] * 0.3
                             res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
@@ -295,7 +329,7 @@ class UltimateInstitutionalBot:
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. الماسح الذكي للفرص الذهبية
+                # 2. الماسح القناص للفرص النظيفة
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة: {total_portfolio:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -312,7 +346,7 @@ class UltimateInstitutionalBot:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[GOLDEN ENTRY] فرصة ذهبية مؤكدة بنسبة 100% على {symbol}! جاري التنفيذ...")
+                            print(f"[SNIPER ENTRY] توافقت كافة شروط القنص بدقة على {symbol}! جاري التنفيذ...")
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
                                 for _ in range(3):
@@ -325,10 +359,10 @@ class UltimateInstitutionalBot:
                                         self.dca_used[symbol] = False
                                         self.breakeven_activated[symbol] = False
                                         self.active_stop_loss_pct[symbol] = STOP_LOSS_PCT
-                                        print(f"[ACTIVE SUCCESS] دخلت صفقة {symbol} بنجاح بسعر {current_price}")
+                                        print(f"[ACTIVE SUCCESS] دخلت الصفقة النظيفة {symbol} بنجاح بسعر {current_price}")
                                         break
                         else:
-                            print(f"[SLEEP] البوت يراقب السوق بهدوء تامة لـ {symbol}...")
+                            print(f"[SLEEP] البوت يراقب بدقة... لا توجد فرصة مطابقة 100% على {symbol}.")
                     
                     time.sleep(2)
 
