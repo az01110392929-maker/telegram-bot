@@ -18,7 +18,7 @@ SYMBOLS = ["SUI-USDT", "DOGE-USDT", "SOL-USDT"]
 ALLOCATION_PCT = 0.80       
 MAX_SINGLE_ASSET_PCT = 0.33 # الحد الأقصى لحصة العملة الواحدة من إجمالي المحفظة (33%)
 STOP_LOSS_PCT = 0.003       
-DCA_TRIGGER_PCT = 0.0015    
+DCA_TRIGGER_PCT = 0.002     # مسافة هبوط محسوبة للتعزيز الحذر
 TAKE_PROFIT_PCT = 0.008     # نسبة جني الأرباح الفوري (0.8%)
 TIMEFRAME = "15m"
 HIGHER_TIMEFRAME = "1H"
@@ -120,7 +120,9 @@ class MultiAssetInstitutionalBot:
             return 25.0
 
     def check_market_conditions(self, symbol):
+        """فحص صارم للبحث عن الفرص الذهبية فقط دون أي تسرع"""
         try:
+            # 1. فلتر الاتجاه العام على الفريم الأكبر (1H)
             htf_path = f"/api/v5/market/candles?instId={symbol}&bar={HIGHER_TIMEFRAME}&limit=20"
             htf_res = requests.get(BASE_URL + htf_path, timeout=10).json()
             if htf_res.get("code") == "0" and htf_res.get("data"):
@@ -129,8 +131,9 @@ class MultiAssetInstitutionalBot:
                 htf_ema = sum(htf_closes) / len(htf_closes)
                 htf_current = htf_closes[-1]
                 if htf_current <= htf_ema:
-                    return False
+                    return False # رفض الصفقة إذا لم يكن الاتجاه العام صاعداً بقوة
 
+            # 2. فلتر الزخم على فريم (15m)
             path = f"/api/v5/market/candles?instId={symbol}&bar={TIMEFRAME}&limit=25"
             res = requests.get(BASE_URL + path, timeout=10).json()
             if res.get("code") != "0" or not res.get("data"):
@@ -141,10 +144,12 @@ class MultiAssetInstitutionalBot:
             ema_20 = sum(closes[-20:]) / 20
             current_price = closes[-1]
 
+            # اشتراط قوة اتجاه حقيقية (ADX > 22) لمنع الأسواق الميتة
             adx_val = self.calculate_adx(candles_reversed)
-            if adx_val < 20:
+            if adx_val < 22:
                 return False
 
+            # 3. فلتر دفتر الأوامر للتأكد من ضغط المشترين الحقيقيين
             book_path = f"/api/v5/market/books?instId={symbol}&sz=15"
             book_res = requests.get(BASE_URL + book_path, timeout=10).json()
             if book_res.get("code") != "0":
@@ -156,7 +161,8 @@ class MultiAssetInstitutionalBot:
             bid_volume = sum([float(b[1]) for b in bids])
             ask_volume = sum([float(a[1]) for a in asks])
 
-            if current_price > ema_20 and bid_volume > (ask_volume * 1.1):
+            # شطارة الفرصة الذهبية: السعر أعلى المتوسط وطلبات الشراء تتفوق بوضوح
+            if current_price > ema_20 and bid_volume > (ask_volume * 1.15):
                 return True
         except Exception as e:
             print(f"[WARNING] Market check error for {symbol}: {e}")
@@ -215,14 +221,14 @@ class MultiAssetInstitutionalBot:
         return False
 
     def run(self):
-        print(f"[OKX-MULTI-ASSET-BOT] النظام يعمل بانتظام وبفحص كل {CHECK_INTERVAL} ثوانٍ (جني أرباح فوري عند 0.8%)...")
+        print(f"[OKX-GOLDEN-BOT] البوت جاهز ويصطاد الفرص الذهبية فقط بدون تسرع (فحص كل {CHECK_INTERVAL} ثوانٍ)...")
         while True:
             try:
                 avail_balance = self.get_balance()
                 active_positions_value = sum(self.position_sizes_usdt.values())
                 total_portfolio_value = avail_balance + active_positions_value
 
-                # 1. متابعة الصفقات المفتوحة
+                # 1. متابعة الصفقات المفتوحة بدقة
                 for symbol in SYMBOLS:
                     if self.positions[symbol] == "LONG":
                         current_price = self.get_ticker_price(symbol)
@@ -234,13 +240,14 @@ class MultiAssetInstitutionalBot:
 
                         print(f"[MONITORING {symbol}] المتوسط: {self.entry_prices[symbol]:.4f} | الحالي: {current_price} | PnL: {pnl_pct*100:.2f}%")
 
-                        # أ. جني الأرباح الفوري بمجرد بلوغ 0.8% أو أعلى دون انتظار
+                        # أ. جني الأرباح الفوري عند 0.8% دون انتظار
                         if pnl_pct >= TAKE_PROFIT_PCT:
-                            print(f"[TAKE PROFIT] تحقيق المستهدف ({pnl_pct*100:.2f}%) على {symbol}! جاري البيع الفوري...")
+                            print(f"[TAKE PROFIT] تحقيق المستهدف الذهبي ({pnl_pct*100:.2f}%) على {symbol}! جاري البيع الفوري...")
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             self.position_sizes_usdt[symbol] = 0.0
                             self.position_sizes_asset[symbol] = 0.0
+                            self.dca_used[symbol] = False 
                             time.sleep(2)
                             continue
 
@@ -255,20 +262,21 @@ class MultiAssetInstitutionalBot:
                             if self.breakeven_activated[symbol]:
                                 print(f"[BREAKEVEN EXIT] الخروج بأمان عند نقطة الدخول لـ {symbol}...")
                             else:
-                                print(f"[STOP LOSS] تفعيل وقف الخسارة الطارئ لـ {symbol}...")
+                                print(f"[STOP LOSS] تفعيل وقف الخسارة الحازم لـ {symbol}...")
                             
                             self.place_order(symbol, "sell", current_price, self.position_sizes_asset[symbol], is_sz=True)
                             self.positions[symbol] = None
                             self.position_sizes_usdt[symbol] = 0.0
                             self.position_sizes_asset[symbol] = 0.0
+                            self.dca_used[symbol] = False
                             time.sleep(2)
                             continue
 
-                        # د. نظام التعافي الذكي DCA
+                        # د. نظام التعزيز الحذر (مرة واحدة فقط بـ 30%)
                         current_asset_ratio = self.position_sizes_usdt[symbol] / total_portfolio_value if total_portfolio_value > 0 else 0
                         if drawdown_pct >= DCA_TRIGGER_PCT and not self.dca_used[symbol] and current_asset_ratio < MAX_SINGLE_ASSET_PCT:
-                            print(f"[DCA] تفعيل التعافي الذكي لـ {symbol}...")
-                            dca_budget = self.position_sizes_usdt[symbol] * 0.5 
+                            print(f"[DCA] تفعيل التعزيز الحذر لمرة واحدة لـ {symbol}...")
+                            dca_budget = self.position_sizes_usdt[symbol] * 0.3 
                             res_id = self.place_order(symbol, "buy", current_price, dca_budget, is_sz=False)
                             if res_id:
                                 dca_filled = False
@@ -286,14 +294,14 @@ class MultiAssetInstitutionalBot:
                                     self.entry_prices[symbol] = total_cost / total_size
                                     self.position_sizes_usdt[symbol] = total_cost
                                     self.position_sizes_asset[symbol] = total_size
-                                    self.dca_used[symbol] = True
+                                    self.dca_used[symbol] = True 
                                     print(f"[DCA SUCCESS] تم تعزيز {symbol} وتحديث المتوسط: {self.entry_prices[symbol]:.4f}")
                     else:
                         self.positions[symbol] = None
                         self.position_sizes_usdt[symbol] = 0.0
                         self.position_sizes_asset[symbol] = 0.0
 
-                # 2. البحث عن فرص جديدة
+                # 2. البحث حصرياً عن الفرص الذهبية الحقيقية
                 print(f"[SCANNER] الكاش المتاح: {avail_balance:.2f} | إجمالي المحفظة الحي: {total_portfolio_value:.2f} USDT")
 
                 for symbol in SYMBOLS:
@@ -311,7 +319,7 @@ class MultiAssetInstitutionalBot:
                             continue  
 
                         if self.check_market_conditions(symbol):
-                            print(f"[FIRE] تطابق الشروط الحقيقية على العملة {symbol}! جاري التنفيذ...")
+                            print(f"[FIRE - GOLDEN CHANCE] تم العثور على الفرصة الذهبية المؤكدة على {symbol}! جاري التنفيذ...")
                             
                             order_id = self.place_order(symbol, "buy", current_price, trade_budget, is_sz=False)
                             if order_id:
@@ -326,12 +334,12 @@ class MultiAssetInstitutionalBot:
                                         self.dca_used[symbol] = False
                                         self.breakeven_activated[symbol] = False
                                         self.active_stop_loss_pct[symbol] = STOP_LOSS_PCT
-                                        print(f"[ACTIVE SUCCESS] تم فتح الصفقة على {symbol} بسعر: {current_price}")
+                                        print(f"[ACTIVE SUCCESS] تم تفعيل الصفقة الذهبية على {symbol} بسعر: {current_price}")
                                         break
                                 else:
                                     print(f"[TIMEOUT] لم يتم تنفيذ الشراء على {symbol}.")
                         else:
-                            print(f"[SLEEP] بانتظار الفرصة الآمنة على {symbol}...")
+                            print(f"[SLEEP] البوت يراقب بهدوء... لا توجد فرصة ذهبية حالياً على {symbol}.")
                     
                     time.sleep(2)
 
